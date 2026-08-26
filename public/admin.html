@@ -1,0 +1,412 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Admin Dashboard</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.css">
+  <style>
+    :root { --gold: #d4af37; --bg: #0b0b0c; --card: rgba(255,255,255,0.02); --border: rgba(255,255,255,0.05); --muted: #9aa3a8; }
+    body { margin: 0; font-family: Inter, sans-serif; background: var(--bg); color: #e6e8ea; padding: 20px; }
+    .container { max-width: 1000px; margin: 0 auto; }
+    .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; }
+    h1 { color: var(--gold); margin: 0; }
+    .nav-tabs { display: flex; gap: 10px; margin-bottom: 20px; border-bottom: 1px solid var(--border); padding-bottom: 10px; overflow-x: auto; }
+    .tab { padding: 10px 15px; cursor: pointer; border-radius: 8px; font-weight: 600; color: var(--muted); transition: all 0.2s; white-space: nowrap; }
+    .tab.active { background: rgba(212, 175, 55, 0.1); color: var(--gold); }
+    .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; margin-bottom: 20px; }
+    .section { display: none; }
+    .section.active { display: block; }
+    
+    button { background: var(--gold); color: #000; border: none; padding: 10px 16px; border-radius: 8px; font-weight: bold; cursor: pointer; }
+    input, textarea, select { background: rgba(0,0,0,0.3); border: 1px solid var(--border); color: #fff; padding: 10px; border-radius: 8px; width: 100%; box-sizing: border-box; margin-bottom: 10px; }
+    
+    .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 15px; margin-bottom: 20px; }
+    .stat-box { background: rgba(0,0,0,0.3); padding: 15px; border-radius: 10px; border: 1px solid var(--border); }
+    .stat-val { font-size: 24px; font-weight: 800; color: #fff; }
+    
+    table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 14px; }
+    th { text-align: left; color: var(--muted); padding: 10px; border-bottom: 1px solid var(--border); }
+    td { padding: 10px; border-bottom: 1px solid var(--border); }
+    
+    .status-online { color: #00ff88; }
+    .status-fail { color: #ff4d4d; }
+    
+    .project-item { display: flex; gap: 15px; align-items: center; border-bottom: 1px solid var(--border); padding: 10px 0; }
+    .project-item img { width: 80px; height: 60px; object-fit: cover; border-radius: 4px; }
+    
+    .history-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 15px; margin-top: 15px; }
+    .history-item { background: rgba(255,255,255,0.03); border-radius: 10px; overflow: hidden; border: 1px solid var(--border); }
+    .history-item img { width: 100%; height: 120px; object-fit: cover; border-bottom: 1px solid var(--border); }
+    .history-actions { padding: 8px; display: flex; gap: 5px; }
+    .history-actions button { padding: 4px 8px; font-size: 11px; flex: 1; }
+    
+    .msg-email { color: var(--gold); text-decoration: none; }
+    .msg-email:hover { text-decoration: underline; }
+    
+    .table-container { overflow-x: auto; width: 100%; }
+    table { width: 100%; border-collapse: collapse; min-width: 500px; }
+    
+    .delete-btn { color: #ff4d4d; cursor: pointer; font-weight: bold; }
+    .switch { position: relative; display: inline-block; width: 50px; height: 24px; }
+    .switch input { opacity: 0; width: 0; height: 0; }
+    .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #333; transition: .4s; border-radius: 24px; }
+    .slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px; background-color: white; transition: .4s; border-radius: 50%; }
+    input:checked + .slider { background-color: var(--gold); }
+    input:checked + .slider:before { transform: translateX(26px); }
+    /* Debug Console */
+    .debug-console { background: #000; color: #00ff00; padding: 10px; border-radius: 8px; font-family: monospace; font-size: 11px; max-height: 100px; overflow-y: auto; margin-bottom: 20px; border: 1px solid #333; }
+  </style>
+</head>
+<body>
+  <div id="loginOverlay" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:var(--bg); z-index:9999; flex-direction:column; align-items:center; justify-content:center;">
+    <h2 style="color:var(--gold)">Admin Login</h2>
+    <input type="password" id="loginPin" placeholder="Enter PIN" style="width:200px; text-align:center;">
+    <button onclick="doLogin()">Login</button>
+  </div>
+
+  <div class="container">
+    <div id="debugLog" class="debug-console">System ready. Waiting for data...</div>
+    <div class="header">
+      <div><h1>Admin Dashboard</h1><p id="serverInfo" class="muted">Loading server state...</p></div>
+      <button onclick="sessionStorage.clear(); window.location.href='index.html'" style="background:transparent;border:1px solid var(--muted);color:var(--muted)">Logout</button>
+    </div>
+
+    <div class="nav-tabs" id="tabs">
+      <div class="tab active" onclick="showSection('analytics')">Analytics</div>
+      <div class="tab" onclick="showSection('portfolio')">Portfolio</div>
+      <div class="tab" onclick="showSection('messages')">Messages</div>
+      <div class="tab" onclick="showSection('security')">Security</div>
+      <div class="tab" onclick="showSection('profile')">Profile</div>
+      <div class="tab" onclick="showSection('settings')">Settings</div>
+    </div>
+
+    <!-- Analytics Section -->
+    <div id="analytics" class="section active">
+      <div class="stats-grid" id="analyticsStats">
+        <div class="stat-box"><div class="muted">Total Views</div><div class="stat-val" id="totalViews">0</div></div>
+        <div class="stat-box"><div class="muted">Unique Visitors</div><div class="stat-val" id="uniqueVisitors">0</div></div>
+        <div class="stat-box"><div class="muted">CPU Load</div><div class="stat-val" id="cpuLoad">0%</div></div>
+        <div class="stat-box"><div class="muted">RAM Used</div><div class="stat-val" id="ramUsed">0MB</div></div>
+      </div>
+      <div class="card">
+        <h3>PM2 Processes</h3>
+        <div class="table-container">
+          <table id="pm2Table"><thead><tr><th>Name</th><th>Status</th><th>CPU</th><th>Mem</th><th>↺</th></tr></thead><tbody id="pm2Body"></tbody></table>
+        </div>
+      </div>
+      <div class="card">
+        <h3>Recent Visitors</h3>
+        <div class="table-container">
+          <table id="visitorTable"><thead><tr><th>IP</th><th>Path</th><th>Agent</th><th>Time</th></tr></thead><tbody id="visitorBody"></tbody></table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Portfolio Section -->
+    <div id="portfolio" class="section">
+      <div class="card">
+        <h3>Add New Project</h3>
+        <input type="text" id="projTitle" placeholder="Project Title">
+        <textarea id="projDesc" placeholder="Description"></textarea>
+        <input type="text" id="projLink" placeholder="External Link (URL)">
+        <input type="file" id="projImage" accept="image/*">
+        <button onclick="addProject()">Save Project</button>
+      </div>
+      <div class="card">
+        <h3>Existing Projects</h3>
+        <div id="projectList"></div>
+      </div>
+    </div>
+
+    <!-- Messages Section -->
+    <div id="messages" class="section">
+      <div class="card" id="messagesContainer">Loading messages...</div>
+    </div>
+
+    <!-- Security Section -->
+    <div id="security" class="section">
+      <div class="stats-grid">
+        <div class="card">
+          <h3>Admin Access Logs</h3>
+          <div class="table-container">
+            <table id="accessTable"><thead><tr><th>IP</th><th>Status</th><th>Time</th></tr></thead><tbody id="accessBody"></tbody></table>
+          </div>
+        </div>
+        <div class="card">
+          <h3>Banned IPs</h3>
+          <div id="bannedList"></div>
+          <div style="margin-top:15px">
+            <input type="text" id="banIp" placeholder="IP Address">
+            <input type="text" id="banReason" placeholder="Reason">
+            <button onclick="banIp()">Ban IP</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Profile Section (Previous logic) -->
+    <div id="profile" class="section">
+      <div class="card">
+        <img src="/api/profile-pic" style="width:120px;height:120px;border-radius:50%;border:3px solid var(--gold);object-fit:cover;" id="currentPic">
+        <div style="margin-top:10px">
+          <input type="file" id="picInput" accept="image/*">
+        </div>
+        <div id="cropperContainer" style="display:none;margin-top:10px">
+          <img id="cropperImage" style="max-width:100%">
+          <button onclick="uploadProfilePic()">Upload Crop</button>
+        </div>
+        <div id="historyContainer" class="history-grid" style="margin-top:20px"></div>
+      </div>
+    </div>
+
+    <!-- Settings Section -->
+    <div id="settings" class="section">
+      <div class="card">
+        <h3>Site Controls</h3>
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px">
+          <div><strong>Maintenance Mode</strong><br><small class="muted">Blocks public access with a notice</small></div>
+          <label class="switch"><input type="checkbox" id="maintSwitch" onchange="toggleMaint(this.checked)"><span class="slider"></span></label>
+        </div>
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px">
+          <div><strong>Site Theme</strong><br><small class="muted">Switch between classic and vibrant design</small></div>
+          <select id="themeSelect" style="width:120px; margin-bottom:0">
+            <option value="classic">Classic</option>
+            <option value="vibrant">Vibrant</option>
+          </select>
+        </div>
+        <div style="margin-top:20px">
+          <strong>Notification Email</strong><br>
+          <small class="muted">Where to send contact form alerts</small>
+          <input type="email" id="notifyEmail" placeholder="you@gmail.com" style="margin-top:5px">
+          
+          <strong>Gmail App Password</strong><br>
+          <small class="muted">Generate this in your Google Account security settings</small>
+          <input type="password" id="smtpPass" placeholder="•••• •••• •••• ••••" style="margin-top:5px">
+          
+          <div style="display:flex;gap:10px;margin-top:5px">
+            <button onclick="saveSettings()">Save Settings</button>
+            <button onclick="testEmail()" style="background:transparent;border:1px solid var(--gold);color:var(--gold)">Test Email</button>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <h3>Quick Links</h3>
+        <a href="http://cs.faizal.uk" target="_blank" style="color:var(--gold)">cs.faizal.uk (CS 1.6)</a><br><br>
+        <a href="http://mac.faizal.uk" target="_blank" style="color:var(--gold)">mac.faizal.uk (MacOS Portal)</a>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.js"></script>
+  <script>
+    let auth = sessionStorage.getItem('adminPin');
+    let cropper;
+
+    window.onload = () => {
+      if (!auth) {
+        document.getElementById('loginOverlay').style.display = 'flex';
+      } else {
+        loadAll();
+      }
+    };
+
+    async function doLogin() {
+      const pin = document.getElementById('loginPin').value;
+      try {
+        const res = await fetch('/api/verify-pin', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pin })
+        });
+        const data = await res.json();
+        if (data.success) {
+          sessionStorage.setItem('adminPin', pin);
+          auth = pin;
+          document.getElementById('loginOverlay').style.display = 'none';
+          loadAll();
+        } else {
+          alert('Invalid PIN');
+        }
+      } catch (err) { alert('Login error'); }
+    }
+
+    function showSection(id) {
+      document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+      document.getElementById(id).classList.add('active');
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      event.target.classList.add('active');
+    }
+
+    function log(msg, isError=false) {
+      const el = document.getElementById('debugLog');
+      const time = new Date().toLocaleTimeString();
+      el.innerHTML = `<div style="color:${isError?'#ff4d4d':'#00ff00'}">[${time}] ${msg}</div>` + el.innerHTML;
+    }
+
+    async function api(path, method='GET', body=null) {
+      const opts = { headers: { 'Authorization': auth } };
+      if (method !== 'GET') { 
+        opts.method = method; 
+        if (body instanceof FormData) opts.body = body; 
+        else if (body !== null) { 
+          opts.headers['Content-Type'] = 'application/json'; 
+          opts.body = JSON.stringify(body); 
+        } 
+      }
+      try {
+        const r = await fetch(path, opts);
+        if (!r.ok) {
+          const text = await r.text();
+          throw new Error(`HTTP ${r.status}: ${text}`);
+        }
+        const data = await r.json();
+        log(`${method} ${path} - Success`);
+        return data;
+      } catch (err) {
+        log(`${method} ${path} - Failed: ${err.message}`, true);
+        throw err;
+      }
+    }
+
+    async function loadAll() {
+      log('Refreshing dashboard data...');
+      try {
+        const statsData = await api('/api/system-stats');
+        if (statsData.success) {
+          const { os, pm2, analytics } = statsData.stats;
+          document.getElementById('serverInfo').innerText = `Ubuntu ${os.release.split('-')[0]} | Up ${Math.floor(os.uptime/3600)}h`;
+          
+          document.getElementById('totalViews').innerText = analytics.totalViews || 0;
+          document.getElementById('uniqueVisitors').innerText = analytics.uniqueVisitors || 0;
+          document.getElementById('cpuLoad').innerText = (pm2.length > 0 ? pm2.reduce((a,b)=>a+b.cpu,0).toFixed(1) : '0') + '%';
+          document.getElementById('ramUsed').innerText = (pm2.length > 0 ? (pm2.reduce((a,b)=>a+b.memory,0)/(1024*1024)).toFixed(0) : '0') + 'MB';
+          
+          document.getElementById('pm2Body').innerHTML = pm2.map(p => `<tr><td><strong>${p.name}</strong></td><td class="status-online">${p.status}</td><td>${p.cpu}%</td><td>${(p.memory/(1024*1024)).toFixed(1)}MB</td><td>${p.restarts}</td></tr>`).join('');
+          document.getElementById('visitorBody').innerHTML = (analytics.recentVisitors || []).map(v => `<tr><td>${v.ip}</td><td>${v.path}</td><td title="${v.user_agent}">${v.user_agent.substring(0,20)}...</td><td>${new Date(v.timestamp).toLocaleTimeString()}</td></tr>`).join('');
+        }
+      } catch (err) { console.error('Stats error:', err); }
+
+      try {
+        const projects = await api('/api/projects');
+        document.getElementById('projectList').innerHTML = projects.projects.map(p => `<div class="project-item"><img src="/api/project-image/${p.id}"><div><strong>${p.title}</strong><br><small>${p.link}</small></div><div class="delete-btn" onclick="delProject(${p.id})">Delete</div></div>`).join('') || '<p class="muted">No projects in database yet.</p>';
+      } catch (err) { console.error('Project error:', err); }
+
+      try {
+        const messages = await api('/api/messages');
+        document.getElementById('messagesContainer').innerHTML = messages.messages.map(m => `
+          <div class="card">
+            <div class="delete-btn" style="float:right" onclick="delMessage(${m.id})">×</div>
+            <strong>${m.name}</strong> (<a href="mailto:${m.email}" class="msg-email">${m.email}</a>)<br>
+            <small>${new Date(m.created_at).toLocaleString()}</small>
+            <p>${m.message}</p>
+          </div>
+        `).join('') || '<p class="muted">No messages.</p>';
+      } catch (err) { console.error('Message error:', err); }
+
+      try {
+        const logs = await api('/api/access-logs');
+        document.getElementById('accessBody').innerHTML = logs.logs.map(l => `<tr><td>${l.ip}</td><td class="${l.status==='SUCCESS'?'status-online':'status-fail'}">${l.status}</td><td>${new Date(l.timestamp).toLocaleString()}</td></tr>`).join('') || '<tr><td colspan="3" class="muted">No logs yet. Try logging in again.</td></tr>';
+      } catch (err) { console.error('Logs error:', err); }
+
+      try {
+        const banned = await api('/api/banned-ips');
+        document.getElementById('bannedList').innerHTML = banned.ips.map(i => `<div style="display:flex;justify-content:space-between;margin-bottom:5px"><span>${i.ip}</span><span class="delete-btn" onclick="unbanIp('${i.ip}')">Unban</span></div>`).join('') || '<p class="muted">No banned IPs.</p>';
+      } catch (err) { console.error('Banned error:', err); }
+
+      try {
+        const settings = await api('/api/settings');
+        const maint = settings.settings.find(s => s.key === 'maintenance_mode');
+        const email = settings.settings.find(s => s.key === 'notification_email');
+        const theme = settings.settings.find(s => s.key === 'site_theme');
+        if (maint) document.getElementById('maintSwitch').checked = maint.value === 'true';
+        if (email) document.getElementById('notifyEmail').value = email.value;
+        if (theme) document.getElementById('themeSelect').value = theme.value;
+      } catch (err) { console.error('Settings error:', err); }
+
+      try {
+        const res = await api('/api/profile-history');
+        const container = document.getElementById('historyContainer');
+        if (res.success && res.history.length > 0) {
+          container.innerHTML = res.history.map(item => `
+            <div class="history-item">
+              <img src="/api/profile-pic/${item.id}">
+              <div class="history-actions">
+                <button onclick="useHistoryPic(${item.id})">Use</button>
+                <button onclick="deleteHistoryPic(${item.id})" style="background:rgba(255,0,0,0.1);color:#ff4d4d">Del</button>
+              </div>
+            </div>
+          `).join('');
+        } else {
+          container.innerHTML = '<p class="muted">No history.</p>';
+        }
+      } catch (err) { console.error('History error:', err); }
+    }
+
+    async function addProject() {
+      const fd = new FormData();
+      fd.append('title', document.getElementById('projTitle').value);
+      fd.append('description', document.getElementById('projDesc').value);
+      fd.append('link', document.getElementById('projLink').value);
+      fd.append('image', document.getElementById('projImage').files[0]);
+      await api('/api/projects', 'POST', fd); loadAll();
+    }
+    async function delProject(id) { if(confirm('Delete?')) { await api(`/api/projects/${id}`, 'DELETE'); loadAll(); } }
+    async function delMessage(id) { if(confirm('Delete?')) { await api(`/api/messages/${id}`, 'DELETE'); loadAll(); } }
+    async function banIp() { await api('/api/ban-ip', 'POST', { ip: document.getElementById('banIp').value, reason: document.getElementById('banReason').value }); loadAll(); }
+    async function unbanIp(ip) { await api(`/api/ban-ip/${ip}`, 'DELETE'); loadAll(); }
+    async function toggleMaint(val) { await api('/api/settings', 'POST', { key: 'maintenance_mode', value: val.toString() }); }
+    async function saveSettings() { 
+      await api('/api/settings', 'POST', { key: 'notification_email', value: document.getElementById('notifyEmail').value }); 
+      await api('/api/settings', 'POST', { key: 'smtp_password', value: document.getElementById('smtpPass').value });
+      await api('/api/settings', 'POST', { key: 'site_theme', value: document.getElementById('themeSelect').value });
+      alert('Saved'); 
+    }
+    async function testEmail() {
+      try {
+        const res = await api('/api/test-email', 'POST');
+        if (res.success) alert('Test email sent! Check your inbox (and spam).');
+        else alert('Failed: ' + res.error);
+      } catch(e) { alert('Error sending test email.'); }
+    }
+
+    // Profile Pic Logic (previous logic)
+    document.getElementById('picInput').onchange = e => {
+      const reader = new FileReader();
+      reader.onload = ev => {
+        document.getElementById('cropperImage').src = ev.target.result;
+        document.getElementById('cropperContainer').style.display='block';
+        if(cropper) cropper.destroy();
+        cropper = new Cropper(document.getElementById('cropperImage'), { aspectRatio:1 });
+      };
+      reader.readAsDataURL(e.target.files[0]);
+    };
+    async function uploadProfilePic() {
+      cropper.getCroppedCanvas().toBlob(async blob => {
+        const fd = new FormData(); fd.append('profilePic', blob);
+        await api('/api/upload-picture', 'POST', fd);
+        document.getElementById('currentPic').src = '/api/profile-pic?t='+Date.now();
+        document.getElementById('cropperContainer').style.display='none';
+      }, 'image/jpeg');
+    }
+
+    async function useHistoryPic(id) {
+      if(confirm('Use this past photo as your current profile picture?')) {
+        await api(`/api/use-history-pic/${id}`, 'POST');
+        document.getElementById('currentPic').src = '/api/profile-pic?t='+Date.now();
+        loadAll();
+      }
+    }
+
+    async function deleteHistoryPic(id) {
+      if(confirm('Delete this photo from history permanently?')) {
+        await api(`/api/profile-history/${id}`, 'DELETE');
+        loadAll();
+      }
+    }
+
+    setInterval(() => { if(auth) loadAll(); }, 10000);
+  </script>
+</body>
+</html>

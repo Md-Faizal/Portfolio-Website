@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mohammad Faizal | Portfolio</title>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700&display=swap" rel="stylesheet">
+  <style>
+    body {
+      margin: 0;
+      font-family: 'Montserrat', Arial, sans-serif;
+      background: #181818;
+      color: #fff;
+    }
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 0 24px;
+    }
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 32px 0 0 0;
+    }
+    .logo {
+      font-weight: bold;
+      font-size: 1.5rem;
+      letter-spacing: 2px;
+    }
+    nav {
+      display: flex;
+      gap: 32px;
+    }
+    nav a {
+      color: #fff;
+      text-decoration: none;
+      font-weight: 500;
+      opacity: 0.8;
+      transition: opacity 0.2s;
+    }
+    nav a.active, nav a:hover {
+      opacity: 1;
+      border-bottom: 2px solid #e2b857;
+    }
+    .menu-icon {
+      display: none;
+      font-size: 1.5rem;
+      color: #fff;
+    }
+    @media (max-width: 800px) {
+      nav { display: none; }
+      .menu-icon { display: block; }
+    }
+    .hero {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      padding: 64px 0 32px 0;
+    }
+    .hero-text {
+      max-width: 520px;
+    }
+    .hero-title {
+      font-size: 2.8rem;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+    .hero-subtitle {
+      color: #e2b857;
+      font-size: 1.1rem;
+      font-weight: 500;
+      margin-bottom: 24px;
+    }
+    .hero-desc {
+      color: #bdbdbd;
+      margin-bottom: 32px;
+    }
+    .btn {
+      background: #e2b857;
+      color: #181818;
+      border: none;
+      padding: 12px 32px;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 1rem;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .btn:hover {
+      background: #cfa93e;
+    }
+    .hero-img {
+      width: 320px;
+      height: 380px;
+      background: #222;
+      border-radius: 24px;
+      object-fit: cover;
+      margin-left: 32px;
+    }
+    @media (max-width: 1000px) {
+      .hero { flex-direction: column; align-items: flex-start; }
+      .hero-img { margin: 32px 0 0 0; width: 100%; max-width: 320px; }
+    }
+    section {
+      margin: 64px 0;
+    }
+    .section-title {
+      color: #e2b857;
+      font-size: 2rem;
+      font-weight: 700;
+      margin-bottom: 24px;
+    }
+    .about-content {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 40px;
+    }
+    .about-text {
+      flex: 1 1 320px;
+    }
+    .about-img {
+      width: 260px;
+      height: 260px;
+      border-radius: 16px;
+      object-fit: cover;
+      background: #222;
+    }
+    .about-desc {
+      color: #bdbdbd;
+      margin-bottom: 24px;
+    }
+    .expertise-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 32px;
+    }
+    .expertise-card {
+      background: #232323;
+      border-radius: 16px;
+      padding: 32px 24px;
+      flex: 1 1 200px;
+      min-width: 200px;
+      text-align: center;
+      color: #fff;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    }
+    .expertise-icon {
+      font-size: 2.2rem;
+      color: #e2b857;
+      margin-bottom: 12px;
+    }
+    .portfolio-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 32px;
+      margin-bottom: 32px;
+    }
+    .portfolio-card {
+      background: #232323;
+      border-radius: 16px;
+      padding: 16px;
+      flex: 1 1 220px;
+      min-width: 220px;
+      text-align: center;
+    }
+    .portfolio-img {
+      width: 100%;
+      height: 120px;
+      object-fit: cover;
+      border-radius: 8px;
+      background: #222;
+      margin-bottom: 12px;
+    }
+    .portfolio-title {
+      font-weight: 600;
+      color: #fff;
+    }
+    .contact-form {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+    .contact-form input, .contact-form textarea {
+      background: #232323;
+      border: none;
+      border-radius: 8px;
+      padding: 12px;
+      color: #fff;
+      font-size: 1rem;
+      flex: 1 1 220px;
+    }
+    .contact-form textarea {
+      min-height: 48px;
+      resize: vertical;
+    }
+    .contact-form .btn {
+      flex: 1 1 120px;
+      min-width: 120px;
+    }
+    footer {
+      text-align: center;
+      color: #bdbdbd;
+      font-size: 0.95rem;
+      padding: 32px 0 16px 0;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="logo">Mohammad Faizal</div>
+      <nav>
+        <a href="#" class="active">Home</a>
+        <a href="#about">About</a>
+        <a href="#portfolio">Portfolio</a>
+      </nav>
+      <div class="menu-icon">&#9776;</div>
+    </header>
+
+    <section class="hero">
+      <div class="hero-text">
+        <div class="hero-title">Hello, I’m<br>Mohammad Faizal</div>
+        <div class="hero-subtitle">Businessman &amp; Computer Science Engineer</div>
+        <div class="hero-desc">I help businesses build and scale their online presence by providing savange-technology solutions and insightful consultancy.</div>
+        <button class="btn">Learn More</button>
+      </div>
+      <img src="https://images.unsplash.com/photo-1511367461989-f85a21fda167?auto=format&fit=facearea&w=400&q=80" alt="Profile" class="hero-img">
+    </section>
+
+    <div style="width:100vw; background:#0e0e0e; margin-left:calc(-50vw + 50%); margin-right:calc(-50vw + 50%); padding:56px 0 56px 0; margin-bottom:56px;">
+      <section id="about" style="background:none; padding:0; margin:0 auto; max-width:1200px;">
+        <div class="about-content" style="align-items: flex-start;">
+          <div class="about-text">
+            <div class="section-title" style="color:#e2b857; font-size:2.2rem; margin-bottom:18px;">About Me</div>
+            <div class="about-desc" style="color:#bdbdbd; font-size:1.08rem; margin-bottom:32px; max-width:340px;">With over 10 years of experience in the tech industry I succeeded in developing innovative online solutions and optimizing business operations.</div>
+            <button class="btn" style="background:#e2b857; color:#181818; font-weight:600; font-size:1rem; border-radius:8px; padding:12px 32px;">Download CV</button>
+          </div>
+          <img src="https://images.unsplash.com/photo-1529626455594-4ff0802cfb7e?auto=format&fit=facearea&w=300&q=80" alt="About" class="about-img" style="box-shadow:0 4px 32px #0008; margin-left:32px;">
+        </div>
+      </section>
+    </div>
+
+    <section>
+      <div class="section-title">My Expertise</div>
+      <div class="expertise-list">
+        <div class="expertise-card">
+          <div class="expertise-icon">&lt;/&gt;</div>
+          <div>Software Development</div>
+        </div>
+        <div class="expertise-card">
+          <div class="expertise-icon">&#128200;</div>
+          <div>Business Strategy</div>
+        </div>
+        <div class="expertise-card">
+          <div class="expertise-icon">&#128221;</div>
+          <div>Project Management</div>
+        </div>
+        <div class="expertise-card">
+          <div class="expertise-icon">&#129302;</div>
+          <div>Machine Learning</div>
+        </div>
+      </div>
+    </section>
+
+    <div style="width:100vw; background:#0e0e0e; margin-left:calc(-50vw + 50%); margin-right:calc(-50vw + 50%); padding:56px 0 56px 0;">
+      <section id="portfolio" style="background:none; padding:0; margin:0 auto; max-width:1200px;">
+        <div class="section-title" style="color:#e2b857; font-size:2.2rem; margin-bottom:18px;">Portfolio</div>
+        <div style="color:#bdbdbd; margin-bottom:24px; font-size:1.08rem;">Here are some of my recent projects that showcase my skills and expertise in various domains.</div>
+        <div class="portfolio-list">
+          <div class="portfolio-card">
+            <img src="https://images.unsplash.com/photo-1461749280684-dccba630e2f6?auto=format&fit=crop&w=400&q=80" alt="E-Commerce" class="portfolio-img">
+            <div class="portfolio-title">E-Commerce Platform</div>
+          </div>
+          <div class="portfolio-card">
+            <img src="https://images.unsplash.com/photo-1519125323398-675f0ddb6308?auto=format&fit=crop&w=400&q=80" alt="Mobile App" class="portfolio-img">
+            <div class="portfolio-title">Mobile App</div>
+          </div>
+          <div class="portfolio-card">
+            <img src="https://images.unsplash.com/photo-1519389950473-47ba0277781c?auto=format&fit=crop&w=400&q=80" alt="Analytics Dashboard" class="portfolio-img">
+            <div class="portfolio-title">Analytics Dashboard</div>
+          </div>
+        </div>
+        <form class="contact-form" style="margin-top:32px;">
+          <input type="text" placeholder="Your Name" required>
+          <input type="email" placeholder="Your Email" required>
+          <textarea placeholder="Message" required></textarea>
+          <button class="btn" type="submit" style="background:#e2b857; color:#181818; font-weight:600; font-size:1rem; border-radius:8px;">Send Message</button>
+        </form>
+      </section>
+    </div>
+
+    <footer>
+      &copy; 2025 Mohammad Faizal. All rights reserved.
+    </footer>
+  </div>
+</body>
+</html>

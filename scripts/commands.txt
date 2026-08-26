@@ -1,0 +1,73 @@
+======================================================
+PERSONAL SITE - UBUNTU DEPLOYMENT & MANAGEMENT COMMANDS
+======================================================
+
+------------------------------------------------------
+1. DEPLOYMENT (Run from Windows Git Bash / PowerShell)
+------------------------------------------------------
+# Deploy the personal site to the Ubuntu VM
+export SSH_TARGET="ubuntu@your_server_ip"  # Or use your SSH alias (e.g., my-ubuntu)
+export SSH_TARGET="my-mac"
+./scripts/deploy-ubuntu.sh
+
+# Run a dry-run to see what would change without modifying anything
+./scripts/deploy-ubuntu.sh --dry-run
+
+
+------------------------------------------------------
+2. SSH ACCESS
+------------------------------------------------------
+# Connect to the Ubuntu VM
+ssh ubuntu@your_server_ip
+# Or using alias: ssh my-ubuntu
+
+
+------------------------------------------------------
+3. PM2 MANAGEMENT (Run on Ubuntu VM)
+------------------------------------------------------
+# Navigate to the production directory
+cd /home/ubuntu/faizal.uk
+
+# Check status of the running app
+pm2 status
+
+# View live console logs for the personal site
+pm2 logs personal-site
+
+# Restart the personal site
+pm2 restart personal-site
+
+# Stop the personal site
+pm2 stop personal-site
+
+# Start the personal site manually (if it's not running)
+pm2 start backend/server.js --name personal-site
+
+# Save the current PM2 list so it restarts on system reboot
+pm2 save
+
+
+------------------------------------------------------
+4. NGINX MANAGEMENT (Run on Ubuntu VM)
+------------------------------------------------------
+# Test if the Nginx configuration is valid
+sudo nginx -t
+
+# Reload Nginx to apply configuration changes
+sudo systemctl reload nginx
+
+# Check Nginx status
+sudo systemctl status nginx
+
+# View Nginx error logs (helpful for troubleshooting 502/404 errors)
+sudo tail -f /var/log/nginx/error.log
+
+
+------------------------------------------------------
+5. BACKUPS & MESSAGES (Run on Ubuntu VM)
+------------------------------------------------------
+# View backups created by the deployment script
+ls -la /home/ubuntu/faizal.uk/backups/
+
+# View submitted contact form messages via SQLite
+sqlite3 /home/ubuntu/faizal.uk/backend/messages.db "SELECT * FROM messages;"

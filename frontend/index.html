@@ -1,0 +1,610 @@
+<!doctype html>
+<html lang="en" class="lenis">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Mohammad Faizal</title>
+    <meta name="description" content="Mohammad Faizal - Personal Portfolio and Digital Experience." />
+    
+    <!-- Preload Critical Futuristic Typography -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Orbitron:wght@500;600;700;800;900&family=Rajdhani:wght@500;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet" />
+
+    <!-- Instant Cyber HUD Shell Styling (Zero Network Latency, FCP < 20ms) -->
+    <style>
+      html, body {
+        margin: 0;
+        padding: 0;
+        background-color: #000000;
+        width: 100%;
+        min-height: 100%;
+        overflow-x: hidden;
+      }
+      #app-shell-preloader {
+        position: fixed;
+        inset: 0;
+        z-index: 99999;
+        background-color: #000000;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        overflow: hidden;
+        pointer-events: none;
+        transition: opacity 0.4s cubic-bezier(0.16, 1, 0.3, 1), visibility 0.4s ease;
+      }
+      #app-shell-preloader.dismissed {
+        opacity: 0;
+        visibility: hidden;
+      }
+      .shell-hud-corners-wrap {
+        position: absolute;
+        inset: clamp(12px, 2.5vw, 28px);
+        pointer-events: none;
+        z-index: 20;
+      }
+      .shell-dot-matrix {
+        display: grid;
+        grid-template-columns: repeat(3, 4px);
+        grid-gap: 4px;
+        pointer-events: none;
+      }
+      .shell-dot {
+        width: 2px;
+        height: 2px;
+        border-radius: 50%;
+        background-color: #55ff00;
+        opacity: 0.45;
+        box-shadow: 0 0 4px rgba(85, 255, 0, 0.6);
+      }
+      
+      .shell-center-stack {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        z-index: 10;
+        position: relative;
+        width: 100%;
+        max-width: 560px;
+        padding: 0 1rem;
+        box-sizing: border-box;
+      }
+      .shell-logo-icon {
+        width: clamp(118px, 20vw, 198px);
+        height: clamp(62px, 10.6vw, 106px);
+        margin-bottom: clamp(1.8rem, 5vh, 4.2rem);
+      }
+      .shell-counter-num {
+        font-family: "Chakra Petch", sans-serif;
+        font-weight: 400;
+        font-size: clamp(3.6rem, 10vw, 7.2rem);
+        color: #ffffff;
+        line-height: 0.95;
+        letter-spacing: 0.02em;
+        text-shadow: 0 0 25px rgba(255, 255, 255, 0.35);
+        text-align: center;
+      }
+      .shell-bar-wrap {
+        width: clamp(220px, 64vw, 360px);
+        height: 3px;
+        background: rgba(255, 255, 255, 0.12);
+        border: 1px solid rgba(85, 255, 0, 0.18);
+        border-radius: 2px;
+        margin-top: clamp(1.2rem, 2.8vh, 1.8rem);
+        position: relative;
+        box-shadow: inset 0 0 6px rgba(0, 0, 0, 0.8);
+        box-sizing: content-box;
+        display: flex;
+        align-items: center;
+      }
+      .shell-bar-fill {
+        height: 100%;
+        background: linear-gradient(90deg, #39ff14 0%, #55ff00 100%);
+        border-radius: 2px;
+        width: 0%;
+        box-shadow: 0 0 10px #55ff00, 0 0 20px rgba(85, 255, 0, 0.6);
+        transition: width 0.1s linear;
+      }
+      .shell-bar-flare {
+        position: absolute;
+        top: 50%;
+        left: 0%;
+        transform: translate(-50%, -50%);
+        width: 7px;
+        height: 7px;
+        background: #ffffff;
+        border-radius: 50%;
+        box-shadow: 0 0 10px 2px #55ff00, 0 0 22px 6px rgba(85, 255, 0, 0.9), 0 0 38px 10px rgba(85, 255, 0, 0.4);
+        transition: left 0.1s linear;
+      }
+      .shell-loading-text {
+        font-family: "Share Tech Mono", monospace;
+        font-weight: 500;
+        font-size: clamp(0.78rem, 2.0vw, 1.25rem);
+        letter-spacing: clamp(0.28em, 0.9vw, 0.42em);
+        color: #55ff00;
+        text-transform: uppercase;
+        margin-top: clamp(1.2rem, 2.8vh, 1.9rem);
+        text-align: center;
+        white-space: nowrap;
+        text-shadow: 0 0 12px #55ff00, 0 0 24px rgba(85, 255, 0, 0.7), 0 0 36px rgba(85, 255, 0, 0.35);
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Immediate Cyber HUD Shell Preloader -->
+    <div id="app-shell-preloader" aria-hidden="true">
+      <!-- Outward <> Chevrons Overlay (Slower Aerodynamic Pulses + Sharp Pointy Tails + Reactive Facet Surges) -->
+      <div style="position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; z-index: 5; pointer-events: none;">
+        <style>
+          /* Fast, energetic aerodynamic pulse sweep (1.2s cycle with 0.35s stagger) */
+          @keyframes pulseMiddleToBottom {
+            0% {
+              stroke-dashoffset: 180;
+              opacity: 0;
+            }
+            5% {
+              opacity: 1;
+            }
+            38% {
+              stroke-dashoffset: -880;
+              opacity: 1;
+            }
+            42% {
+              opacity: 0;
+              stroke-dashoffset: -880;
+            }
+            100% {
+              opacity: 0;
+              stroke-dashoffset: -880;
+            }
+          }
+
+          /* Inward-to-Outward Loading Wave Glow for Facet Polygons */
+          @keyframes loadingWaveFacet {
+            0% {
+              opacity: 0.35;
+            }
+            20% {
+              opacity: 0.95;
+            }
+            45% {
+              opacity: 0.35;
+            }
+            100% {
+              opacity: 0.35;
+            }
+          }
+
+          /* Inward-to-Outward Loading Wave for Neon Baseline Lines */
+          @keyframes loadingWaveLine {
+            0% {
+              opacity: 0.55;
+            }
+            20% {
+              opacity: 1;
+            }
+            45% {
+              opacity: 0.55;
+            }
+            100% {
+              opacity: 0.55;
+            }
+          }
+
+          /* Aerodynamic Layering Dash Arrays */
+          .aero-tail {
+            stroke-dasharray: 230 950;
+          }
+          .aero-body {
+            stroke-dasharray: 125 950;
+          }
+          .aero-head-bloom {
+            stroke-dasharray: 55 950;
+          }
+          .aero-core {
+            stroke-dasharray: 28 950;
+          }
+
+          /* Sequential Flow: Innermost (0s) -> Middle (0.35s) -> Outermost (0.70s) in 1.2s Cycle */
+          .pulse-wave-inner {
+            animation: pulseMiddleToBottom 1.2s cubic-bezier(0.22, 0.75, 0.3, 1) infinite;
+            animation-delay: 0s;
+          }
+          .pulse-wave-mid {
+            animation: pulseMiddleToBottom 1.2s cubic-bezier(0.22, 0.75, 0.3, 1) infinite;
+            animation-delay: 0.35s;
+          }
+          .pulse-wave-outer {
+            animation: pulseMiddleToBottom 1.2s cubic-bezier(0.22, 0.75, 0.3, 1) infinite;
+            animation-delay: 0.70s;
+          }
+
+          /* Linked Inward-to-Outward Facet Glow Wave */
+          .facet-wave-inner {
+            animation: loadingWaveFacet 1.2s cubic-bezier(0.22, 0.75, 0.3, 1) infinite;
+            animation-delay: 0s;
+          }
+          .facet-wave-mid {
+            animation: loadingWaveFacet 1.2s cubic-bezier(0.22, 0.75, 0.3, 1) infinite;
+            animation-delay: 0.35s;
+          }
+          .facet-wave-outer {
+            animation: loadingWaveFacet 1.2s cubic-bezier(0.22, 0.75, 0.3, 1) infinite;
+            animation-delay: 0.70s;
+          }
+
+          /* Linked Inward-to-Outward Line Glow Wave */
+          .line-wave-inner {
+            animation: loadingWaveLine 1.2s cubic-bezier(0.22, 0.75, 0.3, 1) infinite;
+            animation-delay: 0s;
+          }
+          .line-wave-mid {
+            animation: loadingWaveLine 1.2s cubic-bezier(0.22, 0.75, 0.3, 1) infinite;
+            animation-delay: 0.35s;
+          }
+          .line-wave-outer {
+            animation: loadingWaveLine 1.2s cubic-bezier(0.22, 0.75, 0.3, 1) infinite;
+            animation-delay: 0.70s;
+          }
+
+          /* Responsive Dual-Mode Shell SVG Display Engine (Runs Instant at FCP 0ms) */
+          .shell-svg-desktop {
+            display: none !important;
+          }
+          .shell-svg-mobile {
+            display: block !important;
+          }
+          @media (min-width: 768px) {
+            .shell-svg-desktop {
+              display: block !important;
+            }
+            .shell-svg-mobile {
+              display: none !important;
+            }
+          }
+        </style>
+        <svg viewBox="0 0 1920 1080" preserveAspectRatio="xMidYMid slice" class="shell-svg-desktop" style="width: 100%; height: 100%; overflow: visible;">
+          <defs>
+            <linearGradient id="shell-facet-grad-left-1" x1="100%" y1="0%" x2="0%" y2="0%">
+              <stop offset="0%" stop-color="#d9005b" stop-opacity="0.95" />
+              <stop offset="35%" stop-color="#800033" stop-opacity="0.75" />
+              <stop offset="70%" stop-color="#330014" stop-opacity="0.4" />
+              <stop offset="100%" stop-color="#0a0004" stop-opacity="0.1" />
+            </linearGradient>
+            <linearGradient id="shell-facet-grad-left-2" x1="100%" y1="0%" x2="0%" y2="0%">
+              <stop offset="0%" stop-color="#b3004b" stop-opacity="0.9" />
+              <stop offset="40%" stop-color="#5e0026" stop-opacity="0.65" />
+              <stop offset="75%" stop-color="#1f000c" stop-opacity="0.3" />
+              <stop offset="100%" stop-color="#000000" stop-opacity="0.05" />
+            </linearGradient>
+            <linearGradient id="shell-facet-grad-left-3" x1="100%" y1="0%" x2="0%" y2="0%">
+              <stop offset="0%" stop-color="#8c0038" stop-opacity="0.8" />
+              <stop offset="45%" stop-color="#400019" stop-opacity="0.5" />
+              <stop offset="80%" stop-color="#140008" stop-opacity="0.2" />
+              <stop offset="100%" stop-color="#000000" stop-opacity="0.0" />
+            </linearGradient>
+
+            <linearGradient id="shell-facet-grad-right-1" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stop-color="#d9005b" stop-opacity="0.95" />
+              <stop offset="35%" stop-color="#800033" stop-opacity="0.75" />
+              <stop offset="70%" stop-color="#330014" stop-opacity="0.4" />
+              <stop offset="100%" stop-color="#0a0004" stop-opacity="0.1" />
+            </linearGradient>
+            <linearGradient id="shell-facet-grad-right-2" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stop-color="#b3004b" stop-opacity="0.9" />
+              <stop offset="40%" stop-color="#5e0026" stop-opacity="0.65" />
+              <stop offset="75%" stop-color="#1f000c" stop-opacity="0.3" />
+              <stop offset="100%" stop-color="#000000" stop-opacity="0.05" />
+            </linearGradient>
+            <linearGradient id="shell-facet-grad-right-3" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stop-color="#8c0038" stop-opacity="0.8" />
+              <stop offset="45%" stop-color="#400019" stop-opacity="0.5" />
+              <stop offset="80%" stop-color="#140008" stop-opacity="0.2" />
+              <stop offset="100%" stop-color="#000000" stop-opacity="0.0" />
+            </linearGradient>
+
+            <filter id="shell-laser-bloom-outer" x="-30%" y="-30%" width="160%" height="160%">
+              <feGaussianBlur stdDeviation="8" result="blur1" />
+              <feGaussianBlur stdDeviation="16" result="blur2" />
+              <feMerge>
+                <feMergeNode in="blur2" />
+                <feMergeNode in="blur1" />
+                <feMergeNode in="SourceGraphic" />
+              </feMerge>
+            </filter>
+            <filter id="shell-laser-bloom-mid" x="-30%" y="-30%" width="160%" height="160%">
+              <feGaussianBlur stdDeviation="5" result="blur1" />
+              <feGaussianBlur stdDeviation="11" result="blur2" />
+              <feMerge>
+                <feMergeNode in="blur2" />
+                <feMergeNode in="blur1" />
+                <feMergeNode in="SourceGraphic" />
+              </feMerge>
+            </filter>
+          </defs>
+
+          <!-- Left Chevrons (<) -->
+          <polygon points="340,0 -40,540 340,1080 0,1080 0,0" fill="url(#shell-facet-grad-left-1)" class="facet-wave-outer" />
+          <polyline points="340,0 -40,540 340,1080" fill="none" stroke="#ff0055" stroke-width="3.0" class="line-wave-outer" stroke-linecap="round" stroke-linejoin="round" style="filter: drop-shadow(0 0 10px rgba(255, 0, 85, 0.9));" />
+          <path d="M -40 540 L 340 0" fill="none" stroke="#ff0055" stroke-width="1.2" class="pulse-wave-outer aero-tail" stroke-linecap="round" opacity="0.45" />
+          <path d="M -40 540 L 340 0" fill="none" stroke="#ff1475" stroke-width="3.4" class="pulse-wave-outer aero-body" stroke-linecap="round" />
+          <path d="M -40 540 L 340 0" fill="none" stroke="#ff0055" stroke-width="10" class="pulse-wave-outer aero-head-bloom" stroke-linecap="round" filter="url(#shell-laser-bloom-outer)" />
+          <path d="M -40 540 L 340 0" fill="none" stroke="#ffffff" stroke-width="2.4" class="pulse-wave-outer aero-core" stroke-linecap="round" />
+          <path d="M -40 540 L 340 1080" fill="none" stroke="#ff0055" stroke-width="1.2" class="pulse-wave-outer aero-tail" stroke-linecap="round" opacity="0.45" />
+          <path d="M -40 540 L 340 1080" fill="none" stroke="#ff1475" stroke-width="3.4" class="pulse-wave-outer aero-body" stroke-linecap="round" />
+          <path d="M -40 540 L 340 1080" fill="none" stroke="#ff0055" stroke-width="10" class="pulse-wave-outer aero-head-bloom" stroke-linecap="round" filter="url(#shell-laser-bloom-outer)" />
+          <path d="M -40 540 L 340 1080" fill="none" stroke="#ffffff" stroke-width="2.4" class="pulse-wave-outer aero-core" stroke-linecap="round" />
+
+          <polygon points="540,0 160,540 540,1080 340,1080 -40,540 340,0" fill="url(#shell-facet-grad-left-2)" class="facet-wave-mid" />
+          <polyline points="540,0 160,540 540,1080" fill="none" stroke="#ff1475" stroke-width="2.2" class="line-wave-mid" stroke-linecap="round" stroke-linejoin="round" style="filter: drop-shadow(0 0 8px rgba(255, 20, 117, 0.8));" />
+          <path d="M 160 540 L 540 0" fill="none" stroke="#ff1475" stroke-width="1.0" class="pulse-wave-mid aero-tail" stroke-linecap="round" opacity="0.4" />
+          <path d="M 160 540 L 540 0" fill="none" stroke="#ff267e" stroke-width="2.8" class="pulse-wave-mid aero-body" stroke-linecap="round" />
+          <path d="M 160 540 L 540 0" fill="none" stroke="#ff1475" stroke-width="8" class="pulse-wave-mid aero-head-bloom" stroke-linecap="round" filter="url(#shell-laser-bloom-mid)" />
+          <path d="M 160 540 L 540 0" fill="none" stroke="#ffffff" stroke-width="1.8" class="pulse-wave-mid aero-core" stroke-linecap="round" />
+          <path d="M 160 540 L 540 1080" fill="none" stroke="#ff1475" stroke-width="1.0" class="pulse-wave-mid aero-tail" stroke-linecap="round" opacity="0.4" />
+          <path d="M 160 540 L 540 1080" fill="none" stroke="#ff267e" stroke-width="2.8" class="pulse-wave-mid aero-body" stroke-linecap="round" />
+          <path d="M 160 540 L 540 1080" fill="none" stroke="#ff1475" stroke-width="8" class="pulse-wave-mid aero-head-bloom" stroke-linecap="round" filter="url(#shell-laser-bloom-mid)" />
+          <path d="M 160 540 L 540 1080" fill="none" stroke="#ffffff" stroke-width="1.8" class="pulse-wave-mid aero-core" stroke-linecap="round" />
+
+          <polygon points="740,0 360,540 740,1080 540,1080 160,540 540,0" fill="url(#shell-facet-grad-left-3)" class="facet-wave-inner" />
+          <polyline points="740,0 360,540 740,1080" fill="none" stroke="#e61a6b" stroke-width="1.6" class="line-wave-inner" stroke-linecap="round" stroke-linejoin="round" style="filter: drop-shadow(0 0 6px rgba(230, 26, 107, 0.7));" />
+          <path d="M 360 540 L 740 0" fill="none" stroke="#e61a6b" stroke-width="0.9" class="pulse-wave-inner aero-tail" stroke-linecap="round" opacity="0.35" />
+          <path d="M 360 540 L 740 0" fill="none" stroke="#e61a6b" stroke-width="2.2" class="pulse-wave-inner aero-body" stroke-linecap="round" />
+          <path d="M 360 540 L 740 0" fill="none" stroke="#ffffff" stroke-width="1.4" class="pulse-wave-inner aero-core" stroke-linecap="round" />
+          <path d="M 360 540 L 740 1080" fill="none" stroke="#e61a6b" stroke-width="0.9" class="pulse-wave-inner aero-tail" stroke-linecap="round" opacity="0.35" />
+          <path d="M 360 540 L 740 1080" fill="none" stroke="#e61a6b" stroke-width="2.2" class="pulse-wave-inner aero-body" stroke-linecap="round" />
+          <path d="M 360 540 L 740 1080" fill="none" stroke="#ffffff" stroke-width="1.4" class="pulse-wave-inner aero-core" stroke-linecap="round" />
+
+          <!-- Right Chevrons (>) -->
+          <polygon points="1580,0 1960,540 1580,1080 1920,1080 1920,0" fill="url(#shell-facet-grad-right-1)" class="facet-wave-outer" />
+          <polyline points="1580,0 1960,540 1580,1080" fill="none" stroke="#ff0055" stroke-width="3.0" class="line-wave-outer" stroke-linecap="round" stroke-linejoin="round" style="filter: drop-shadow(0 0 10px rgba(255, 0, 85, 0.9));" />
+          <path d="M 1960 540 L 1580 0" fill="none" stroke="#ff0055" stroke-width="1.2" class="pulse-wave-outer aero-tail" stroke-linecap="round" opacity="0.45" />
+          <path d="M 1960 540 L 1580 0" fill="none" stroke="#ff1475" stroke-width="3.4" class="pulse-wave-outer aero-body" stroke-linecap="round" />
+          <path d="M 1960 540 L 1580 0" fill="none" stroke="#ff0055" stroke-width="10" class="pulse-wave-outer aero-head-bloom" stroke-linecap="round" filter="url(#shell-laser-bloom-outer)" />
+          <path d="M 1960 540 L 1580 0" fill="none" stroke="#ffffff" stroke-width="2.4" class="pulse-wave-outer aero-core" stroke-linecap="round" />
+          <path d="M 1960 540 L 1580 1080" fill="none" stroke="#ff0055" stroke-width="1.2" class="pulse-wave-outer aero-tail" stroke-linecap="round" opacity="0.45" />
+          <path d="M 1960 540 L 1580 1080" fill="none" stroke="#ff1475" stroke-width="3.4" class="pulse-wave-outer aero-body" stroke-linecap="round" />
+          <path d="M 1960 540 L 1580 1080" fill="none" stroke="#ff0055" stroke-width="10" class="pulse-wave-outer aero-head-bloom" stroke-linecap="round" filter="url(#shell-laser-bloom-outer)" />
+          <path d="M 1960 540 L 1580 1080" fill="none" stroke="#ffffff" stroke-width="2.4" class="pulse-wave-outer aero-core" stroke-linecap="round" />
+
+          <polygon points="1380,0 1760,540 1380,1080 1580,1080 1960,540 1580,0" fill="url(#shell-facet-grad-right-2)" class="facet-wave-mid" />
+          <polyline points="1380,0 1760,540 1380,1080" fill="none" stroke="#ff1475" stroke-width="2.2" class="line-wave-mid" stroke-linecap="round" stroke-linejoin="round" style="filter: drop-shadow(0 0 8px rgba(255, 20, 117, 0.8));" />
+          <path d="M 1760 540 L 1380 0" fill="none" stroke="#ff1475" stroke-width="1.0" class="pulse-wave-mid aero-tail" stroke-linecap="round" opacity="0.4" />
+          <path d="M 1760 540 L 1380 0" fill="none" stroke="#ff267e" stroke-width="2.8" class="pulse-wave-mid aero-body" stroke-linecap="round" />
+          <path d="M 1760 540 L 1380 0" fill="none" stroke="#ff1475" stroke-width="8" class="pulse-wave-mid aero-head-bloom" stroke-linecap="round" filter="url(#shell-laser-bloom-mid)" />
+          <path d="M 1760 540 L 1380 0" fill="none" stroke="#ffffff" stroke-width="1.8" class="pulse-wave-mid aero-core" stroke-linecap="round" />
+          <path d="M 1760 540 L 1380 1080" fill="none" stroke="#ff1475" stroke-width="1.0" class="pulse-wave-mid aero-tail" stroke-linecap="round" opacity="0.4" />
+          <path d="M 1760 540 L 1380 1080" fill="none" stroke="#ff267e" stroke-width="2.8" class="pulse-wave-mid aero-body" stroke-linecap="round" />
+          <path d="M 1760 540 L 1380 1080" fill="none" stroke="#ff1475" stroke-width="8" class="pulse-wave-mid aero-head-bloom" stroke-linecap="round" filter="url(#shell-laser-bloom-mid)" />
+          <path d="M 1760 540 L 1380 1080" fill="none" stroke="#ffffff" stroke-width="1.8" class="pulse-wave-mid aero-core" stroke-linecap="round" />
+
+          <polygon points="1180,0 1560,540 1180,1080 1380,1080 1760,540 1380,0" fill="url(#shell-facet-grad-right-3)" class="facet-wave-inner" />
+          <polyline points="1180,0 1560,540 1180,1080" fill="none" stroke="#e61a6b" stroke-width="1.6" class="line-wave-inner" stroke-linecap="round" stroke-linejoin="round" style="filter: drop-shadow(0 0 6px rgba(230, 26, 107, 0.7));" />
+          <path d="M 1560 540 L 1180 0" fill="none" stroke="#e61a6b" stroke-width="0.9" class="pulse-wave-inner aero-tail" stroke-linecap="round" opacity="0.35" />
+          <path d="M 1560 540 L 1180 0" fill="none" stroke="#e61a6b" stroke-width="2.2" class="pulse-wave-inner aero-body" stroke-linecap="round" />
+          <path d="M 1560 540 L 1180 0" fill="none" stroke="#ffffff" stroke-width="1.4" class="pulse-wave-inner aero-core" stroke-linecap="round" />
+          <path d="M 1560 540 L 1180 1080" fill="none" stroke="#e61a6b" stroke-width="0.9" class="pulse-wave-inner aero-tail" stroke-linecap="round" opacity="0.35" />
+          <path d="M 1560 540 L 1180 1080" fill="none" stroke="#e61a6b" stroke-width="2.2" class="pulse-wave-inner aero-body" stroke-linecap="round" />
+          <path d="M 1560 540 L 1180 1080" fill="none" stroke="#ffffff" stroke-width="1.4" class="pulse-wave-inner aero-core" stroke-linecap="round" />
+        </svg>
+
+        <!-- Mobile Portrait SVG (viewBox 750x1334) -->
+        <svg viewBox="0 0 750 1334" preserveAspectRatio="xMidYMid slice" class="shell-svg-mobile" style="width: 100%; height: 100%; overflow: visible;">
+          <defs>
+            <linearGradient id="shell-mob-facet-grad-left-1" x1="100%" y1="0%" x2="0%" y2="0%">
+              <stop offset="0%" stop-color="#d9005b" stop-opacity="0.95" />
+              <stop offset="35%" stop-color="#800033" stop-opacity="0.75" />
+              <stop offset="70%" stop-color="#330014" stop-opacity="0.4" />
+              <stop offset="100%" stop-color="#0a0004" stop-opacity="0.1" />
+            </linearGradient>
+            <linearGradient id="shell-mob-facet-grad-left-2" x1="100%" y1="0%" x2="0%" y2="0%">
+              <stop offset="0%" stop-color="#b3004b" stop-opacity="0.9" />
+              <stop offset="40%" stop-color="#5e0026" stop-opacity="0.65" />
+              <stop offset="75%" stop-color="#1f000c" stop-opacity="0.3" />
+              <stop offset="100%" stop-color="#000000" stop-opacity="0.05" />
+            </linearGradient>
+            <linearGradient id="shell-mob-facet-grad-left-3" x1="100%" y1="0%" x2="0%" y2="0%">
+              <stop offset="0%" stop-color="#8c0038" stop-opacity="0.8" />
+              <stop offset="45%" stop-color="#400019" stop-opacity="0.5" />
+              <stop offset="80%" stop-color="#140008" stop-opacity="0.2" />
+              <stop offset="100%" stop-color="#000000" stop-opacity="0.0" />
+            </linearGradient>
+
+            <linearGradient id="shell-mob-facet-grad-right-1" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stop-color="#d9005b" stop-opacity="0.95" />
+              <stop offset="35%" stop-color="#800033" stop-opacity="0.75" />
+              <stop offset="70%" stop-color="#330014" stop-opacity="0.4" />
+              <stop offset="100%" stop-color="#0a0004" stop-opacity="0.1" />
+            </linearGradient>
+            <linearGradient id="shell-mob-facet-grad-right-2" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stop-color="#b3004b" stop-opacity="0.9" />
+              <stop offset="40%" stop-color="#5e0026" stop-opacity="0.65" />
+              <stop offset="75%" stop-color="#1f000c" stop-opacity="0.3" />
+              <stop offset="100%" stop-color="#000000" stop-opacity="0.05" />
+            </linearGradient>
+            <linearGradient id="shell-mob-facet-grad-right-3" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stop-color="#8c0038" stop-opacity="0.8" />
+              <stop offset="45%" stop-color="#400019" stop-opacity="0.5" />
+              <stop offset="80%" stop-color="#140008" stop-opacity="0.2" />
+              <stop offset="100%" stop-color="#000000" stop-opacity="0.0" />
+            </linearGradient>
+          </defs>
+
+          <!-- Mobile Left Chevrons (<) -->
+          <polygon points="160,0 20,667 160,1334 0,1334 0,0" fill="url(#shell-mob-facet-grad-left-1)" class="facet-wave-outer" />
+          <polyline points="160,0 20,667 160,1334" fill="none" stroke="#ff0055" stroke-width="3.0" class="line-wave-outer" stroke-linecap="round" stroke-linejoin="round" style="filter: drop-shadow(0 0 10px rgba(255, 0, 85, 0.9));" />
+          <path d="M 20 667 L 160 0" fill="none" stroke="#ff0055" stroke-width="1.2" class="pulse-wave-outer aero-tail" stroke-linecap="round" opacity="0.45" />
+          <path d="M 20 667 L 160 0" fill="none" stroke="#ff1475" stroke-width="3.4" class="pulse-wave-outer aero-body" stroke-linecap="round" />
+          <path d="M 20 667 L 160 0" fill="none" stroke="#ff0055" stroke-width="10" class="pulse-wave-outer aero-head-bloom" stroke-linecap="round" filter="url(#shell-laser-bloom-outer)" />
+          <path d="M 20 667 L 160 0" fill="none" stroke="#ffffff" stroke-width="2.4" class="pulse-wave-outer aero-core" stroke-linecap="round" />
+          <path d="M 20 667 L 160 1334" fill="none" stroke="#ff0055" stroke-width="1.2" class="pulse-wave-outer aero-tail" stroke-linecap="round" opacity="0.45" />
+          <path d="M 20 667 L 160 1334" fill="none" stroke="#ff1475" stroke-width="3.4" class="pulse-wave-outer aero-body" stroke-linecap="round" />
+          <path d="M 20 667 L 160 1334" fill="none" stroke="#ff0055" stroke-width="10" class="pulse-wave-outer aero-head-bloom" stroke-linecap="round" filter="url(#shell-laser-bloom-outer)" />
+          <path d="M 20 667 L 160 1334" fill="none" stroke="#ffffff" stroke-width="2.4" class="pulse-wave-outer aero-core" stroke-linecap="round" />
+
+          <polygon points="230,0 80,667 230,1334 160,1334 20,667 160,0" fill="url(#shell-mob-facet-grad-left-2)" class="facet-wave-mid" />
+          <polyline points="230,0 80,667 230,1334" fill="none" stroke="#ff1475" stroke-width="2.2" class="line-wave-mid" stroke-linecap="round" stroke-linejoin="round" style="filter: drop-shadow(0 0 8px rgba(255, 20, 117, 0.8));" />
+          <path d="M 80 667 L 230 0" fill="none" stroke="#ff1475" stroke-width="1.0" class="pulse-wave-mid aero-tail" stroke-linecap="round" opacity="0.4" />
+          <path d="M 80 667 L 230 0" fill="none" stroke="#ff267e" stroke-width="2.8" class="pulse-wave-mid aero-body" stroke-linecap="round" />
+          <path d="M 80 667 L 230 0" fill="none" stroke="#ff1475" stroke-width="8" class="pulse-wave-mid aero-head-bloom" stroke-linecap="round" filter="url(#shell-laser-bloom-mid)" />
+          <path d="M 80 667 L 230 0" fill="none" stroke="#ffffff" stroke-width="1.8" class="pulse-wave-mid aero-core" stroke-linecap="round" />
+          <path d="M 80 667 L 230 1334" fill="none" stroke="#ff1475" stroke-width="1.0" class="pulse-wave-mid aero-tail" stroke-linecap="round" opacity="0.4" />
+          <path d="M 80 667 L 230 1334" fill="none" stroke="#ff267e" stroke-width="2.8" class="pulse-wave-mid aero-body" stroke-linecap="round" />
+          <path d="M 80 667 L 230 1334" fill="none" stroke="#ff1475" stroke-width="8" class="pulse-wave-mid aero-head-bloom" stroke-linecap="round" filter="url(#shell-laser-bloom-mid)" />
+          <path d="M 80 667 L 230 1334" fill="none" stroke="#ffffff" stroke-width="1.8" class="pulse-wave-mid aero-core" stroke-linecap="round" />
+
+          <polygon points="300,0 140,667 300,1334 230,1334 80,667 230,0" fill="url(#shell-mob-facet-grad-left-3)" class="facet-wave-inner" />
+          <polyline points="300,0 140,667 300,1334" fill="none" stroke="#e61a6b" stroke-width="1.6" class="line-wave-inner" stroke-linecap="round" stroke-linejoin="round" style="filter: drop-shadow(0 0 6px rgba(230, 26, 107, 0.7));" />
+          <path d="M 140 667 L 300 0" fill="none" stroke="#e61a6b" stroke-width="0.9" class="pulse-wave-inner aero-tail" stroke-linecap="round" opacity="0.35" />
+          <path d="M 140 667 L 300 0" fill="none" stroke="#e61a6b" stroke-width="2.2" class="pulse-wave-inner aero-body" stroke-linecap="round" />
+          <path d="M 140 667 L 300 0" fill="none" stroke="#ffffff" stroke-width="1.4" class="pulse-wave-inner aero-core" stroke-linecap="round" />
+          <path d="M 140 667 L 300 1334" fill="none" stroke="#e61a6b" stroke-width="0.9" class="pulse-wave-inner aero-tail" stroke-linecap="round" opacity="0.35" />
+          <path d="M 140 667 L 300 1334" fill="none" stroke="#e61a6b" stroke-width="2.2" class="pulse-wave-inner aero-body" stroke-linecap="round" />
+          <path d="M 140 667 L 300 1334" fill="none" stroke="#ffffff" stroke-width="1.4" class="pulse-wave-inner aero-core" stroke-linecap="round" />
+
+          <!-- Mobile Right Chevrons (>) -->
+          <polygon points="590,0 730,667 590,1334 750,1334 750,0" fill="url(#shell-mob-facet-grad-right-1)" class="facet-wave-outer" />
+          <polyline points="590,0 730,667 590,1334" fill="none" stroke="#ff0055" stroke-width="3.0" class="line-wave-outer" stroke-linecap="round" stroke-linejoin="round" style="filter: drop-shadow(0 0 10px rgba(255, 0, 85, 0.9));" />
+          <path d="M 730 667 L 590 0" fill="none" stroke="#ff0055" stroke-width="1.2" class="pulse-wave-outer aero-tail" stroke-linecap="round" opacity="0.45" />
+          <path d="M 730 667 L 590 0" fill="none" stroke="#ff1475" stroke-width="3.4" class="pulse-wave-outer aero-body" stroke-linecap="round" />
+          <path d="M 730 667 L 590 0" fill="none" stroke="#ff0055" stroke-width="10" class="pulse-wave-outer aero-head-bloom" stroke-linecap="round" filter="url(#shell-laser-bloom-outer)" />
+          <path d="M 730 667 L 590 0" fill="none" stroke="#ffffff" stroke-width="2.4" class="pulse-wave-outer aero-core" stroke-linecap="round" />
+          <path d="M 730 667 L 590 1334" fill="none" stroke="#ff0055" stroke-width="1.2" class="pulse-wave-outer aero-tail" stroke-linecap="round" opacity="0.45" />
+          <path d="M 730 667 L 590 1334" fill="none" stroke="#ff1475" stroke-width="3.4" class="pulse-wave-outer aero-body" stroke-linecap="round" />
+          <path d="M 730 667 L 590 1334" fill="none" stroke="#ff0055" stroke-width="10" class="pulse-wave-outer aero-head-bloom" stroke-linecap="round" filter="url(#shell-laser-bloom-outer)" />
+          <path d="M 730 667 L 590 1334" fill="none" stroke="#ffffff" stroke-width="2.4" class="pulse-wave-outer aero-core" stroke-linecap="round" />
+
+          <polygon points="520,0 670,667 520,1334 590,1334 730,667 590,0" fill="url(#shell-mob-facet-grad-right-2)" class="facet-wave-mid" />
+          <polyline points="520,0 670,667 520,1334" fill="none" stroke="#ff1475" stroke-width="2.2" class="line-wave-mid" stroke-linecap="round" stroke-linejoin="round" style="filter: drop-shadow(0 0 8px rgba(255, 20, 117, 0.8));" />
+          <path d="M 670 667 L 520 0" fill="none" stroke="#ff1475" stroke-width="1.0" class="pulse-wave-mid aero-tail" stroke-linecap="round" opacity="0.4" />
+          <path d="M 670 667 L 520 0" fill="none" stroke="#ff267e" stroke-width="2.8" class="pulse-wave-mid aero-body" stroke-linecap="round" />
+          <path d="M 670 667 L 520 0" fill="none" stroke="#ff1475" stroke-width="8" class="pulse-wave-mid aero-head-bloom" stroke-linecap="round" filter="url(#shell-laser-bloom-mid)" />
+          <path d="M 670 667 L 520 0" fill="none" stroke="#ffffff" stroke-width="1.8" class="pulse-wave-mid aero-core" stroke-linecap="round" />
+          <path d="M 670 667 L 520 1334" fill="none" stroke="#ff1475" stroke-width="1.0" class="pulse-wave-mid aero-tail" stroke-linecap="round" opacity="0.4" />
+          <path d="M 670 667 L 520 1334" fill="none" stroke="#ff267e" stroke-width="2.8" class="pulse-wave-mid aero-body" stroke-linecap="round" />
+          <path d="M 670 667 L 520 1334" fill="none" stroke="#ff1475" stroke-width="8" class="pulse-wave-mid aero-head-bloom" stroke-linecap="round" filter="url(#shell-laser-bloom-mid)" />
+          <path d="M 670 667 L 520 1334" fill="none" stroke="#ffffff" stroke-width="1.8" class="pulse-wave-mid aero-core" stroke-linecap="round" />
+
+          <polygon points="450,0 610,667 450,1334 520,1334 670,667 520,0" fill="url(#shell-mob-facet-grad-right-3)" class="facet-wave-inner" />
+          <polyline points="450,0 610,667 450,1334" fill="none" stroke="#e61a6b" stroke-width="1.6" class="line-wave-inner" stroke-linecap="round" stroke-linejoin="round" style="filter: drop-shadow(0 0 6px rgba(230, 26, 107, 0.7));" />
+          <path d="M 610 667 L 450 0" fill="none" stroke="#e61a6b" stroke-width="0.9" class="pulse-wave-inner aero-tail" stroke-linecap="round" opacity="0.35" />
+          <path d="M 610 667 L 450 0" fill="none" stroke="#e61a6b" stroke-width="2.2" class="pulse-wave-inner aero-body" stroke-linecap="round" />
+          <path d="M 610 667 L 450 0" fill="none" stroke="#ffffff" stroke-width="1.4" class="pulse-wave-inner aero-core" stroke-linecap="round" />
+          <path d="M 610 667 L 450 1334" fill="none" stroke="#e61a6b" stroke-width="0.9" class="pulse-wave-inner aero-tail" stroke-linecap="round" opacity="0.35" />
+          <path d="M 610 667 L 450 1334" fill="none" stroke="#e61a6b" stroke-width="2.2" class="pulse-wave-inner aero-body" stroke-linecap="round" />
+          <path d="M 610 667 L 450 1334" fill="none" stroke="#ffffff" stroke-width="1.4" class="pulse-wave-inner aero-core" stroke-linecap="round" />
+        </svg>
+      </div>
+
+      <div class="shell-hud-corners-wrap">
+        <!-- Top-Left Corner -->
+        <div style="position: absolute; top: 0; left: 0; display: flex; gap: 8px;">
+          <svg width="38" height="38" viewBox="0 0 38 38" style="overflow: visible;">
+            <polygon points="0,38 3.5,29 3.5,10.5 10.5,3.5 29,3.5 38,0 8,0 0,8" fill="#55ff00" />
+          </svg>
+          <div style="margin-top: 6px;">
+            <div class="shell-dot-matrix">
+              <div class="shell-dot"></div><div class="shell-dot"></div><div class="shell-dot"></div>
+              <div class="shell-dot"></div><div class="shell-dot"></div><div class="shell-dot"></div>
+              <div class="shell-dot"></div><div class="shell-dot"></div><div class="shell-dot"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Top-Right Corner -->
+        <div style="position: absolute; top: 0; right: 0; display: flex; gap: 8px; flex-direction: row-reverse;">
+          <svg width="38" height="38" viewBox="0 0 38 38" style="overflow: visible;">
+            <polygon points="0,0 30,0 38,8 38,38 34.5,29 34.5,10.5 27.5,3.5 9,3.5" fill="#55ff00" />
+          </svg>
+          <div style="margin-top: 6px;">
+            <div class="shell-dot-matrix">
+              <div class="shell-dot"></div><div class="shell-dot"></div><div class="shell-dot"></div>
+              <div class="shell-dot"></div><div class="shell-dot"></div><div class="shell-dot"></div>
+              <div class="shell-dot"></div><div class="shell-dot"></div><div class="shell-dot"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Bottom-Left Corner -->
+        <div style="position: absolute; bottom: 0; left: 0; display: flex; gap: 8px; align-items: flex-end;">
+          <svg width="38" height="38" viewBox="0 0 38 38" style="overflow: visible;">
+            <polygon points="0,0 3.5,9 3.5,27.5 10.5,34.5 29,34.5 38,38 8,38 0,30" fill="#55ff00" />
+          </svg>
+          <div style="margin-bottom: 6px;">
+            <div class="shell-dot-matrix">
+              <div class="shell-dot"></div><div class="shell-dot"></div><div class="shell-dot"></div>
+              <div class="shell-dot"></div><div class="shell-dot"></div><div class="shell-dot"></div>
+              <div class="shell-dot"></div><div class="shell-dot"></div><div class="shell-dot"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Bottom-Right Corner -->
+        <div style="position: absolute; bottom: 0; right: 0; display: flex; gap: 8px; flex-direction: row-reverse; align-items: flex-end;">
+          <svg width="38" height="38" viewBox="0 0 38 38" style="overflow: visible;">
+            <polygon points="38,0 34.5,9 34.5,27.5 27.5,34.5 9,34.5 0,38 30,38 38,30" fill="#55ff00" />
+          </svg>
+          <div style="margin-bottom: 6px;">
+            <div class="shell-dot-matrix">
+              <div class="shell-dot"></div><div class="shell-dot"></div><div class="shell-dot"></div>
+              <div class="shell-dot"></div><div class="shell-dot"></div><div class="shell-dot"></div>
+              <div class="shell-dot"></div><div class="shell-dot"></div><div class="shell-dot"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="shell-center-stack">
+        <svg class="shell-logo-icon" viewBox="0 0 171.63 91">
+          <path d="M43.82,70.3l64.52.05,5.42-12.76-32.78-.36,41.09-19.08,7.56-18.43,27.69.85-25.84,61.15c-2.63,6.23-11.43,8.64-18.18,8.65l-111.12.13,41.64-20.2Z" fill="#55ff00" />
+          <path d="M129.63,19.71l-65.22.74-5.49,12.65,32.87.55-41.14,19.05-6.83,17.6-28.38-.02L41.22,9.13C43.67,3.32,52.08.55,58.48.55l110.96-.05-39.82,19.21Z" fill="#55ff00" />
+          <polygon points="44.55 69.8 51.04 53.07 93.98 33.19 59.67 32.61 64.74 20.95 128.88 20.22 121.68 37.77 78.77 57.7 113 58.08 108.01 69.85 44.55 69.8" fill="#000000" />
+          <path d="M128.13,20.73l-6.84,16.67-40.73,18.92-4,1.86,4.41.05,31.28.34-4.57,10.78-62.4-.05,6.16-15.86,40.77-18.88,3.96-1.83-4.36-.07-31.37-.53,4.64-10.68,63.06-.71M129.63,19.71l-65.22.74-5.49,12.65,32.87.55-41.14,19.05-6.83,17.6,64.52.05,5.42-12.76-32.78-.36,41.09-19.08,7.56-18.43h0Z" fill="#ffffff" />
+        </svg>
+        <div class="shell-counter-num" id="shell-counter-val">0%</div>
+        <div class="shell-bar-wrap">
+          <div class="shell-bar-fill" id="shell-bar-fill"></div>
+          <div class="shell-bar-flare" id="shell-bar-flare"></div>
+        </div>
+        <div class="shell-loading-text">LOADING EXPERIENCE...</div>
+      </div>
+    </div>
+
+    <!-- Instant Shell Progress Micro-Engine (Runs before React scripts download) -->
+    <script>
+      (function() {
+        window.__SHELL_PROGRESS__ = 0;
+        var start = performance.now();
+        var valEl = document.getElementById('shell-counter-val');
+        var fillEl = document.getElementById('shell-bar-fill');
+        var flareEl = document.getElementById('shell-bar-flare');
+        var cur = 0;
+        
+        function tick(now) {
+          if (document.getElementById('app-shell-preloader')?.classList.contains('dismissed')) return;
+          var elapsed = now - start;
+          // Smooth progressive target
+          var target = Math.min(85, Math.round((elapsed / 1800) * 85));
+          if (target > cur) {
+            cur += Math.min(1, target - cur);
+          }
+          window.__SHELL_PROGRESS__ = cur;
+          if (valEl) valEl.innerHTML = cur + '%';
+          if (fillEl) fillEl.style.width = cur + '%';
+          if (flareEl) flareEl.style.left = cur + '%';
+          if (cur < 85) {
+            requestAnimationFrame(tick);
+          }
+        }
+        requestAnimationFrame(tick);
+      })();
+    </script>
+
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>

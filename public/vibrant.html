@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Faizal | Digital & Industrial</title>
+    <meta name="description" content="Where code meets craftsmanship — a digital portfolio of innovation.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@200;300;400;600;700;900&family=JetBrains+Mono:wght@300;400&display=swap" rel="stylesheet">
+    <link rel="icon" type="image/png" href="images/favicon.png">
+    <link rel="stylesheet" href="vibrant.css">
+</head>
+<body class="light-mode">
+
+    <!-- Custom Cursor -->
+    <div id="cursor-dot"></div>
+    <div id="cursor-ring"></div>
+
+    <!-- Loading Screen -->
+    <div id="loader">
+        <div class="loader-bar"></div>
+        <p class="loader-text">INITIALIZING</p>
+    </div>
+
+    <!-- Navigation -->
+    <nav id="main-nav">
+        <div class="nav-logo">F<span class="accent">.</span></div>
+        <div class="nav-center">
+            <a href="#digital">Digital</a>
+            <a href="#manufacturing">Manufacturing</a>
+            <a href="#projects">Projects</a>
+            <a href="#contact">Contact</a>
+        </div>
+        <div class="nav-right">
+            <label class="toggle-wrapper" title="Toggle dark/light">
+                <input type="checkbox" id="theme-checkbox">
+                <div class="toggle-track">
+                    <div class="toggle-thumb">
+                        <span class="toggle-icon sun">☀️</span>
+                        <span class="toggle-icon moon">🌙</span>
+                    </div>
+                </div>
+            </label>
+            <a href="admin.html" class="btn-admin">Admin</a>
+        </div>
+    </nav>
+
+    <!-- HERO SECTION — The Laptop Scene -->
+    <section id="hero" class="section-hero">
+        <div class="hero-text-overlay">
+            <div id="hero-tagline" class="hero-tagline">
+                <span class="tagline-pre">THE INTERSECTION OF</span>
+                <h1>Code &amp; Craft</h1>
+                <p class="hero-sub">Faizal — Building the future, one commit at a time.</p>
+            </div>
+        </div>
+
+        <!-- Three.js 3D Canvas -->
+        <canvas id="three-canvas"></canvas>
+
+        <!-- Scroll Cue -->
+        <div class="scroll-cue">
+            <span>SCROLL</span>
+            <div class="scroll-line"></div>
+        </div>
+    </section>
+
+    <!-- TRANSITION STRIP -->
+    <div class="strip-transition"></div>
+
+    <!-- DIGITAL SECTION — Code fades in after laptop recedes -->
+    <section id="digital" class="section-digital">
+        <div class="glass-card reveal-block">
+            <span class="section-tag">01 — DIGITAL</span>
+            <h2>Engineering<br><em>Intelligent Systems</em></h2>
+            <p>From back-end architectures to full-stack products — I architect systems that scale, platforms that perform, and interfaces that inspire.</p>
+        </div>
+
+        <div class="skills-pills reveal-block">
+            <span class="pill">Node.js</span>
+            <span class="pill">SQLite</span>
+            <span class="pill">Three.js</span>
+            <span class="pill">Express</span>
+            <span class="pill">Linux</span>
+            <span class="pill">NGINX</span>
+            <span class="pill">PM2</span>
+        </div>
+    </section>
+
+    <!-- MANUFACTURING SECTION — Industrial 3D objects animate in -->
+    <section id="manufacturing" class="section-manufacturing">
+        <div class="mfg-content">
+            <div class="glass-card reveal-block mfg-card">
+                <span class="section-tag">02 — MANUFACTURING</span>
+                <h2>Heritage<br><em>Meets Precision</em></h2>
+                <p>Overseeing UCA's daily production — where centuries-old Ayurvedic methods are preserved with modern quality control, inventory intelligence, and operational data analytics.</p>
+                <div class="mfg-stats">
+                    <div class="stat-item"><span class="stat-num">100%</span><span class="stat-label">Herbal</span></div>
+                    <div class="stat-item"><span class="stat-num">3+</span><span class="stat-label">Decades</span></div>
+                    <div class="stat-item"><span class="stat-num">∞</span><span class="stat-label">Legacy</span></div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- PROJECTS SECTION -->
+    <section id="projects" class="section-projects">
+        <div class="section-header reveal-block">
+            <span class="section-tag">03 — PORTFOLIO</span>
+            <h2>Selected <em>Innovations</em></h2>
+        </div>
+        <div class="projects-grid" id="project-list"></div>
+    </section>
+
+    <!-- CONTACT SECTION -->
+    <section id="contact" class="section-contact">
+        <div class="glass-card contact-glass reveal-block">
+            <span class="section-tag">04 — CONNECT</span>
+            <h2>Start a<br><em>Conversation</em></h2>
+            <p>Whether it's digital transformation, operational efficiency, or just an idea worth exploring — let's talk.</p>
+            <form id="contact-form" action="/save-message" method="POST">
+                <div class="form-row">
+                    <input type="text" name="name" placeholder="Your Name" required>
+                    <input type="email" name="email" placeholder="Your Email" required>
+                </div>
+                <input type="text" name="subject" placeholder="Subject" required>
+                <textarea name="message" rows="4" placeholder="Your message..."></textarea>
+                <button type="submit" class="btn-primary magnetic-btn">Send Message →</button>
+            </form>
+        </div>
+    </section>
+
+    <!-- FOOTER -->
+    <footer class="site-footer">
+        <div class="footer-inner">
+            <div class="footer-logo">F<span class="accent">.</span></div>
+            <p class="footer-copy">© 2024 Faizal. Crafted with intention.</p>
+            <a href="admin.html" style="color: var(--text-muted); font-size: 0.75rem; text-decoration: none;">Admin</a>
+        </div>
+    </footer>
+
+    <!-- Admin PIN Modal -->
+    <div class="admin-modal-overlay" id="adminModalOverlay" style="display: none;">
+        <div class="admin-modal glass-card">
+            <h3>Admin Access</h3>
+            <p class="modal-muted">Enter administrative PIN to unlock</p>
+            <input type="password" id="adminPinInput" class="admin-pin-input" maxlength="4" placeholder="••••" autocomplete="off">
+            <button class="admin-btn btn-primary" id="adminPinSubmit">Unlock</button>
+            <button class="admin-btn btn-cancel" id="adminPinCancel">Cancel</button>
+        </div>
+    </div>
+
+    <!-- Maintenance Overlay -->
+    <div id="maintOverlay" style="display: none;">
+        <div class="maint-content glass-card">
+            <div class="maint-icon">⚡</div>
+            <h1 id="maintHeading">System Upgrades</h1>
+            <p class="maint-lead">This digital workshop is currently undergoing scheduled enhancements.</p>
+            <p class="maint-sub">I'll be back online in a few minutes with more precision and craftsmanship.</p>
+        </div>
+        <a href="/admin.html" class="maint-bypass">.</a>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r134/three.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/ScrollTrigger.min.js"></script>
+    <script>
+        // Inline Maintenance & Admin Bypass Script
+        async function checkMaint() {
+            try {
+                const res = await fetch('/api/maintenance-status');
+                const data = await res.json();
+                if (data.maintenance) {
+                    document.getElementById('maintOverlay').style.display = 'flex';
+                    document.body.style.overflow = 'hidden';
+                    document.getElementById('maintOverlay').style.pointerEvents = 'auto';
+                }
+            } catch (e) {
+                console.error('Maintenance check failed:', e);
+            }
+        }
+        checkMaint();
+
+        // Administrative PIN Long Press Bypass
+        let pressTimer;
+        const adminModal = document.getElementById('adminModalOverlay');
+        const pinInput = document.getElementById('adminPinInput');
+
+        function startAdminLongPress() {
+            pressTimer = setTimeout(openAdminModal, 2000);
+        }
+
+        function cancelAdminLongPress() {
+            clearTimeout(pressTimer);
+        }
+
+        function openAdminModal() {
+            adminModal.style.display = 'flex';
+            pinInput.value = '';
+            pinInput.focus();
+        }
+
+        // Attach long-press listeners to the main navigation logo
+        const logo = document.querySelector('.nav-logo');
+        if (logo) {
+            logo.addEventListener('mousedown', startAdminLongPress);
+            logo.addEventListener('mouseup', cancelAdminLongPress);
+            logo.addEventListener('mouseleave', cancelAdminLongPress);
+            logo.addEventListener('touchstart', startAdminLongPress);
+            logo.addEventListener('touchend', cancelAdminLongPress);
+            logo.addEventListener('touchcancel', cancelAdminLongPress);
+        }
+
+        // Attach long-press listeners to the maintenance screen heading
+        const maintHeading = document.getElementById('maintHeading');
+        if (maintHeading) {
+            maintHeading.addEventListener('mousedown', startAdminLongPress);
+            maintHeading.addEventListener('mouseup', cancelAdminLongPress);
+            maintHeading.addEventListener('mouseleave', cancelAdminLongPress);
+            maintHeading.addEventListener('touchstart', startAdminLongPress);
+            maintHeading.addEventListener('touchend', cancelAdminLongPress);
+            maintHeading.addEventListener('touchcancel', cancelAdminLongPress);
+        }
+
+        // Modal Controls & Authentication
+        document.getElementById('adminPinCancel').addEventListener('click', () => {
+            adminModal.style.display = 'none';
+        });
+
+        document.getElementById('adminPinSubmit').addEventListener('click', submitPin);
+        pinInput.addEventListener('keyup', (e) => {
+            if (e.key === 'Enter') submitPin();
+        });
+
+        async function submitPin() {
+            const pin = pinInput.value;
+            try {
+                const res = await fetch('/api/verify-pin', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ pin })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    sessionStorage.setItem('adminPin', pin);
+                    window.location.href = 'admin.html';
+                } else {
+                    const modalContainer = adminModal.querySelector('.admin-modal');
+                    modalContainer.classList.add('shake');
+                    setTimeout(() => modalContainer.classList.remove('shake'), 400);
+                    pinInput.value = '';
+                    pinInput.focus();
+                }
+            } catch (err) {
+                alert('Error verifying PIN');
+            }
+        }
+    </script>
+    <script src="vibrant.js"></script>
+</body>
+</html>

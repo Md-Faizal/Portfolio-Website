@@ -1,0 +1,45 @@
+# ==============================================================================
+# DEVELOPER ANIMATION CONTROLLER & MASTER TIMELINE SCRUBBER
+# ==============================================================================
+
+🎛️ ON-SCREEN FLOATING DEV HUD:
+- Drag the header bar (`⋮⋮ DEV CONTROLLER`) anywhere across the screen.
+- Click `✕` on the top right OR press `~` (Backtick) / `Shift + D` to completely hide the HUD.
+- When hidden, the HUD completely vanishes from the DOM for 100% pristine full-page screenshots and recordings.
+- Press `~` (Backtick) or `Shift + D` anytime to bring it right back!
+
+---------------------------------------------------------------------------------------------------------
+🎯 1. MASTER TIMELINE SCRUBBER (0% -> 100%):
+Continuous master scrubber spanning the entire user journey:
+- [ 0% -> 25% ]  : Blue Loader Counter (0% to 100% percentage display)
+- [ 25% -> 45% ] : 5-Bar Sweep & Scarath Animated SVG reveal (Mascot -> Text -> Flag stripes)
+- [ 45% -> 60% ] : Page Transition (Outgoing zoom-out to 0.84 & slide-up card)
+- [ 60% -> 100% ]: Home Page continuous smooth scroll from Hero down to footer
+
+▶️ "Play All (Scrubber)" is directly linked to the Master Timeline Scrubber!
+Clicking "▶ Play All" will smoothly play the scrubber slider from 0% all the way to 100%,
+with full Pause / Play toggle support.
+
+---------------------------------------------------------------------------------------------------------
+🔍 2. PER-STAGE DEDICATED SCRUBBER (Separated Controls):
+When you switch to a specific stage, a dedicated fine-tuning tool appears:
+- On Loader Stage       : Dedicated 0%..100% counter slider
+- On Logo Stage         : Layer picker buttons (1. Mascot, 2. Text, 3. Flags)
+- On Transition Stage   : Phase & zoom scale inspection
+- On Home Stage         : Section jumper grid (Hero, Projects, Proof, Services, Quote, Reel, Contact, Showcase)
+
+---------------------------------------------------------------------------------------------------------
+⌨️ KEYBOARD SHORTCUTS (Instant Stage Switching):
+- Shift + 1               : Jump & Freeze at 01 Loader
+- Shift + 2               : Jump & Freeze at 02 Logo Reveal (5-bar sweep)
+- Shift + 3               : Jump & Freeze at 03 Page Transition Slide
+- Shift + 4               : Jump to 04 Home page
+- Shift + Space           : Toggle Play/Pause on the Master Timeline Scrubber
+- ` (Backtick)            : Toggle Dev HUD on/off (Completely hides for screenshots)
+- Shift + D               : Toggle Dev HUD on/off
+
+---------------------------------------------------------------------------------------------------------
+💡 PERSISTENCE:
+All stage selections, speed settings, and timeline positions automatically persist in localStorage.
+When editing CSS/JSX code or pressing F5 (refresh), your position stays frozen so you can tune animations effortlessly!
+Click '🔄 Reset' or '🧹' to clear persistence and return to the default initial intro.

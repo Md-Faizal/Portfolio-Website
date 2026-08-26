@@ -1,0 +1,55 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Playfair+Display:ital,wght@0,400;0,600;1,400;1,600&family=Plus+Jakarta+Sans:wght@700;800&family=Spline+Sans+Mono:wght@400;500;600&display=swap');
+
+:root {
+  --bg-primary: #f8fafc;
+  --bg-gradient: linear-gradient(135deg, #c5efff 0%, #9ee1fa 100%);
+  --text-primary: #0a1f2c;
+  --accent-pink: #ec4899;
+  --accent-purple: #a855f7;
+  --gradient-accent: linear-gradient(to right, var(--accent-pink), var(--accent-purple));
+  --grid-line: rgba(10, 31, 44, 0.12);
+  --border-radius-sm: 8px;
+  --border-radius-md: 16px;
+  --border-radius-lg: 24px;
+}
+
+[data-theme='dark'] {
+  --bg-primary: #050b14;
+  --bg-gradient: linear-gradient(135deg, #0a1128 0%, #1c3144 100%);
+  --text-primary: #f5f5f0;
+  --grid-line: rgba(255, 255, 255, 0.1);
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Inter', sans-serif;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  min-height: 100vh;
+  cursor: none; /* Hide default cursor */
+}
+
+/* Ensure links and buttons don't show default pointer either */
+a, button {
+  cursor: none !important;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
