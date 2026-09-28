@@ -64,7 +64,7 @@ function preloadFonts(timeoutMs = 2000) {
 export function trackPreloading({
   assets = CRITICAL_LOADER_ASSETS,
   onProgress,
-  minDuration = 1400,
+  minDuration = 800,
   maxTimeout = 5000
 } = {}) {
   let isCancelled = false;
@@ -135,8 +135,8 @@ export function trackPreloading({
       
       const delta = target - currentVisual;
       if (delta > 0) {
-        // Cap step per frame to 1.1% max (at 60 FPS = 66% per second) so digits count continuously (1, 2, 3, 4, 5...)
-        const step = Math.min(1.1, Math.max(0.25, delta * 0.1));
+        // Cap step per frame to 2.0 max so digits count up very fast
+        const step = Math.min(2.0, Math.max(0.4, delta * 0.15));
         currentVisual = Math.min(target, currentVisual + step);
       }
     }

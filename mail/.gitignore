@@ -1,0 +1,6 @@
+# Local mail data and state
+mail-data/
+mail-state/
+mail-logs/
+config/opendkim/
+config/ssl/

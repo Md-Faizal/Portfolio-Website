@@ -1,0 +1,14 @@
+.git
+.gitignore
+node_modules
+*/node_modules
+target
+*/target
+backend-rust/target
+*.db
+*.log
+backups
+mail
+config
+test
+scripts

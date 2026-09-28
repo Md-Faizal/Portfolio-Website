@@ -1,0 +1,43 @@
+services:
+  personal-site:
+    container_name: personal-site-rust
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        BUILDKIT_INLINE_CACHE: "1"
+    image: personal-site:latest
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      - PORT=3002
+      - ADMIN_PIN=2004
+      - RUST_LOG=info
+      - TZ=UTC
+      # ── SMTP via Stalwart mail container (same host localhost) ───────────
+      - SMTP_HOST=127.0.0.1
+      - SMTP_PORT=25
+      - SMTP_USER=
+      - SMTP_PASS=
+      - SMTP_TLS=none
+      - SENDER_EMAIL=reports@faizal.uk
+      - SENDER_NAME=Faizal VM Health Monitor
+    volumes:
+      # Persistent SQLite database — survives container restarts
+      - /home/ubuntu/faizal.uk/backend/messages.db:/app/messages.db
+      # Dynamic uploads (profile pics, project images)
+      - /home/ubuntu/faizal.uk/public:/app/public
+      # Read-only Docker socket — lets health engine inspect sibling containers
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    deploy:
+      resources:
+        limits:
+          memory: 48M
+        reservations:
+          memory: 8M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "2"
+

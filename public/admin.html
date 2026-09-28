@@ -4,14 +4,53 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Admin Dashboard</title>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.css">
   <style>
-    :root { --gold: #d4af37; --bg: #0b0b0c; --card: rgba(255,255,255,0.02); --border: rgba(255,255,255,0.05); --muted: #9aa3a8; }
-    body { margin: 0; font-family: Inter, sans-serif; background: var(--bg); color: #e6e8ea; padding: 20px; }
-    .container { max-width: 1000px; margin: 0 auto; }
+    @font-face {
+      font-family: 'Melodrama';
+      src: url('/assets/Melodrama-Medium-Q0USV-od.woff2') format('woff2');
+      font-weight: 500;
+      font-style: normal;
+      font-display: swap;
+    }
+    @font-face {
+      font-family: 'Melodrama';
+      src: url('/assets/Melodrama-Bold-DzBNduUE.woff2') format('woff2');
+      font-weight: 700;
+      font-style: normal;
+      font-display: swap;
+    }
+    :root { 
+      --gold: #d4af37; 
+      --gold-gradient: linear-gradient(135deg, #fae084 0%, #d4af37 60%, #a6811e 100%);
+      --bg: #09090b; 
+      --card: rgba(24, 24, 27, 0.7); 
+      --border: rgba(255, 255, 255, 0.08); 
+      --border-gold: rgba(212, 175, 55, 0.2);
+      --muted: #a1a1aa; 
+    }
+    body { 
+      margin: 0; 
+      font-family: 'Inter', sans-serif; 
+      background: var(--bg); 
+      color: #f4f4f5; 
+      padding: 24px; 
+      background-image: radial-gradient(circle at 50% 0%, rgba(212, 175, 55, 0.06) 0%, transparent 60%);
+      min-height: 100vh;
+    }
+    .container { max-width: 1080px; margin: 0 auto; }
     .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; }
-    h1 { color: var(--gold); margin: 0; }
+    h1, h2, h3 { font-family: 'Melodrama', serif; letter-spacing: -0.02em; color: #f5f5f5; }
+    h1 { 
+      background: var(--gold-gradient);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin: 0; 
+      font-size: 2.2rem;
+      font-weight: 700;
+    }
+
     .nav-tabs { display: flex; gap: 10px; margin-bottom: 20px; border-bottom: 1px solid var(--border); padding-bottom: 10px; overflow-x: auto; }
     .tab { padding: 10px 15px; cursor: pointer; border-radius: 8px; font-weight: 600; color: var(--muted); transition: all 0.2s; white-space: nowrap; }
     .tab.active { background: rgba(212, 175, 55, 0.1); color: var(--gold); }
@@ -57,6 +96,19 @@
     input:checked + .slider:before { transform: translateX(26px); }
     /* Debug Console */
     .debug-console { background: #000; color: #00ff00; padding: 10px; border-radius: 8px; font-family: monospace; font-size: 11px; max-height: 100px; overflow-y: auto; margin-bottom: 20px; border: 1px solid #333; }
+    
+    /* Health & Report UI */
+    .badge { display: inline-block; padding: 3px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; text-transform: uppercase; }
+    .badge-success { background: rgba(16,185,129,0.15); color: #10b981; border: 1px solid rgba(16,185,129,0.3); }
+    .badge-warning { background: rgba(245,158,11,0.15); color: #f59e0b; border: 1px solid rgba(245,158,11,0.3); }
+    .badge-danger { background: rgba(239,68,68,0.15); color: #ef4444; border: 1px solid rgba(239,68,68,0.3); }
+    .progress-bar-bg { background: rgba(255,255,255,0.06); border-radius: 4px; height: 8px; overflow: hidden; margin-top: 6px; }
+    .progress-bar-fill { height: 100%; transition: width 0.4s ease; }
+    .btn-secondary { background: transparent; border: 1px solid var(--gold); color: var(--gold); }
+    .btn-secondary:hover { background: rgba(212,175,55,0.1); }
+    .service-pill { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 6px; margin: 4px; font-size: 12px; font-weight: 600; }
+    .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 10000; align-items: center; justify-content: center; backdrop-filter: blur(4px); }
+    .modal-window { background: #121214; border: 1px solid var(--border); border-radius: 12px; width: 90%; max-width: 900px; height: 85vh; display: flex; flex-direction: column; overflow: hidden; }
   </style>
 </head>
 <body>
@@ -75,6 +127,7 @@
 
     <div class="nav-tabs" id="tabs">
       <div class="tab active" onclick="showSection('analytics')">Analytics</div>
+      <div class="tab" onclick="showSection('health')">VM Health &amp; Reports</div>
       <div class="tab" onclick="showSection('portfolio')">Portfolio</div>
       <div class="tab" onclick="showSection('messages')">Messages</div>
       <div class="tab" onclick="showSection('security')">Security</div>
@@ -194,8 +247,213 @@
       <div class="card">
         <h3>Quick Links</h3>
         <a href="http://cs.faizal.uk" target="_blank" style="color:var(--gold)">cs.faizal.uk (CS 1.6)</a><br><br>
-        <a href="http://mac.faizal.uk" target="_blank" style="color:var(--gold)">mac.faizal.uk (MacOS Portal)</a>
+        <a href="http://mac.faizal.uk" target="_blank" style="color:var(--gold)">mac.faizal.uk (MacOS Portal)</a><br><br>
+        <a href="/mail/" target="_blank" style="color:var(--gold)">Stalwart Mail Admin</a>
       </div>
+    </div>
+
+    <!-- VM Health & Automated Reports Section -->
+    <div id="health" class="section">
+      <!-- Executive Overview Banner -->
+      <div class="card" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px;">
+        <div>
+          <div style="font-size: 12px; color: var(--muted); text-transform: uppercase; font-weight: 700;">VM Health &amp; Diagnostics</div>
+          <div style="display: flex; align-items: center; gap: 12px; margin-top: 4px;">
+            <h2 style="margin: 0; color: #fff;" id="healthHostName">macos (Ubuntu 24.04)</h2>
+            <span id="healthOverallBadge" class="badge badge-success">ALL SYSTEMS OPERATIONAL</span>
+          </div>
+          <small class="muted" id="healthLastChecked">Checking live health...</small>
+        </div>
+        <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+          <button onclick="loadHealthData(true)" class="btn-secondary">↺ Refresh Metrics</button>
+          <button onclick="openReportPreview()" class="btn-secondary">👁 Preview Report</button>
+          <button onclick="sendReportNow()" id="btnSendReport" style="display: flex; align-items: center; gap: 6px;">
+            <span id="sendSpinner" style="display:none; width:12px; height:12px; border:2px solid #000; border-top:2px solid transparent; border-radius:50%; animation:spin 0.8s linear infinite;"></span>
+            ✉ Send Report Email Now
+          </button>
+        </div>
+      </div>
+
+      <!-- Action Items / Warning Box -->
+      <div id="healthIssuesBox" style="display:none; background: rgba(239,68,68,0.1); border-left: 4px solid #ef4444; border-radius: 8px; padding: 14px 16px; margin-bottom: 20px;">
+        <div style="font-weight: 700; color: #ef4444; margin-bottom: 6px;">Action Items &amp; Warnings Detected</div>
+        <ul id="healthIssuesList" style="margin: 0; padding-left: 20px; color: #fca5a5; font-size: 13px;"></ul>
+      </div>
+
+      <!-- System KPI Grid -->
+      <div class="stats-grid">
+        <div class="stat-box">
+          <div class="muted">System Uptime</div>
+          <div class="stat-val" id="healthUptime">--</div>
+          <small class="muted" id="healthBoot">Calculating...</small>
+        </div>
+        <div class="stat-box">
+          <div class="muted">CPU Load (1m, 5m, 15m)</div>
+          <div class="stat-val" id="healthCpuLoad">0.00</div>
+          <small class="muted" id="healthCpuModel">Cores: 1</small>
+        </div>
+        <div class="stat-box">
+          <div class="muted">Memory Usage</div>
+          <div class="stat-val" id="healthRamVal">0%</div>
+          <small class="muted" id="healthRamDetails">0 MB / 0 MB</small>
+          <div class="progress-bar-bg"><div id="healthRamBar" class="progress-bar-fill" style="width: 0%; background: #3b82f6;"></div></div>
+        </div>
+        <div class="stat-box">
+          <div class="muted">Root Disk (/dev/sda1)</div>
+          <div class="stat-val" id="healthDiskVal">0%</div>
+          <small class="muted" id="healthDiskDetails">0 GB Free</small>
+          <div class="progress-bar-bg"><div id="healthDiskBar" class="progress-bar-fill" style="width: 0%; background: #10b981;"></div></div>
+        </div>
+      </div>
+
+      <!-- Automated Email Report Settings Card -->
+      <div class="card">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 10px;">
+          <div>
+            <h3 style="margin: 0;">Automated 24-Hour Email Report</h3>
+            <small class="muted">Dispatches full system metrics, PM2, Docker, 24h errors &amp; analytics daily from <code style="color:var(--gold);">reports@faizal.uk</code> via Brevo Relay (Port 587)</small>
+          </div>
+          <div style="display:flex; align-items:center; gap: 10px;">
+            <span class="badge badge-success" id="cronStatusBadge">CRON ACTIVE: DAILY 08:00 UTC</span>
+          </div>
+        </div>
+        
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 15px; margin-top: 15px;">
+          <div>
+            <label style="font-size: 13px; font-weight: 600; color: #cbd5e1;">Recipient Email Addresses (comma separated)</label>
+            <input type="text" id="reportRecipient" placeholder="me@faizal.uk, fazztronic@gmail.com" style="margin-top: 6px;">
+          </div>
+          <div>
+            <label style="font-size: 13px; font-weight: 600; color: #cbd5e1;">Daily Dispatch Time (UTC)</label>
+            <input type="text" id="reportTime" value="08:00" placeholder="08:00" style="margin-top: 6px;">
+          </div>
+        </div>
+
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 10px; flex-wrap: wrap; gap: 10px;">
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <label class="switch"><input type="checkbox" id="reportEnabledSwitch" checked><span class="slider"></span></label>
+            <span style="font-size: 13px; font-weight: 600;">Enable Daily Automated Dispatch</span>
+          </div>
+          <div style="display: flex; gap: 10px;">
+            <button onclick="saveReportSettings()">Save Settings</button>
+            <button onclick="sendReportNow()" class="btn-secondary">Test Send Now</button>
+          </div>
+        </div>
+
+        <!-- Last Sent Status -->
+        <div style="margin-top: 15px; padding-top: 12px; border-top: 1px solid var(--border); font-size: 12px; color: var(--muted);" id="lastReportInfo">
+          Last Report Sent: None yet recorded.
+        </div>
+      </div>
+
+      <!-- Docker Containers Table Card -->
+      <div class="card">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+          <h3 style="margin: 0;">Docker Containers Status</h3>
+          <span id="dockerCountBadge" class="badge badge-success">0 Running</span>
+        </div>
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Image</th>
+                <th>Health / State</th>
+                <th>CPU %</th>
+                <th>Memory</th>
+                <th>Network I/O</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="dockerTableBody">
+              <tr><td colspan="7" class="muted" style="text-align:center;">Loading Docker containers...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- PM2 Applications Table Card -->
+      <div class="card">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+          <h3 style="margin: 0;">PM2 Applications Status</h3>
+          <span id="pm2CountBadge" class="badge badge-success">0 Online</span>
+        </div>
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>PID</th>
+                <th>Status</th>
+                <th>CPU</th>
+                <th>Memory</th>
+                <th>Restarts</th>
+                <th>Uptime</th>
+              </tr>
+            </thead>
+            <tbody id="healthPm2Body">
+              <tr><td colspan="7" class="muted" style="text-align:center;">Loading PM2 processes...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Microservices & Active Ports Probe -->
+      <div class="card">
+        <h3>Active Microservices &amp; Port Probes</h3>
+        <div id="servicePillsContainer" style="display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px;">
+          <div class="muted">Probing ports...</div>
+        </div>
+      </div>
+
+      <!-- 24-Hour System Errors & Security Incidents -->
+      <div class="card">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; flex-wrap: wrap; gap: 8px;">
+          <h3 style="margin: 0;">24-Hour Errors &amp; Security Incidents</h3>
+          <div style="font-size: 12px; color: var(--muted);">
+            SSH Auth Blocks: <strong id="sshBlocksCount" style="color:#f59e0b;">0</strong> &bull; Total Incidents: <strong id="totalIncidentsCount">0</strong>
+          </div>
+        </div>
+        <div id="healthErrorsContainer" style="margin-top: 10px;">
+          <div class="muted">Loading system logs...</div>
+        </div>
+      </div>
+
+      <!-- Report Dispatch History -->
+      <div class="card">
+        <h3>Report Dispatch History</h3>
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>Timestamp</th>
+                <th>Recipient</th>
+                <th>Health</th>
+                <th>Incidents</th>
+                <th>Trigger</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="reportHistoryBody">
+              <tr><td colspan="6" class="muted" style="text-align:center;">No past reports logged yet</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Report Preview Modal -->
+  <div id="reportModal" class="modal-overlay">
+    <div class="modal-window">
+      <div style="padding: 12px 18px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; background: #000;">
+        <strong style="color: var(--gold); font-size: 15px;">Automated Health Report &mdash; Live Preview</strong>
+        <div style="display: flex; gap: 10px;">
+          <button onclick="sendReportNow()" class="btn-secondary" style="padding: 6px 12px; font-size: 12px;">✉ Send This Now</button>
+          <button onclick="closeReportPreview()" style="background: transparent; border: 1px solid var(--muted); color: var(--muted); padding: 6px 12px; font-size: 12px;">✕ Close</button>
+        </div>
+      </div>
+      <iframe id="reportPreviewIframe" style="flex: 1; border: none; width: 100%; height: 100%; background: #0b0b0c;"></iframe>
     </div>
   </div>
 
@@ -234,9 +492,15 @@
 
     function showSection(id) {
       document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
-      document.getElementById(id).classList.add('active');
+      const targetSec = document.getElementById(id);
+      if (targetSec) targetSec.classList.add('active');
       document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-      event.target.classList.add('active');
+      if (window.event && window.event.target && window.event.target.classList.contains('tab')) {
+        window.event.target.classList.add('active');
+      }
+      if (id === 'health') {
+        loadHealthData();
+      }
     }
 
     function log(msg, isError=false) {
@@ -404,6 +668,238 @@
         await api(`/api/profile-history/${id}`, 'DELETE');
         loadAll();
       }
+    }
+
+    // ==========================================
+    // VM HEALTH & 24-HOUR REPORTING FUNCTIONS
+    // ==========================================
+    let healthDataCache = null;
+
+    async function loadHealthData(showToast = false) {
+      log('Fetching VM health & reports data...');
+      try {
+        const [dataRes, statusRes] = await Promise.all([
+          api('/api/health-report/data'),
+          api('/api/health-report/status')
+        ]);
+
+        if (dataRes.success && dataRes.data) {
+          healthDataCache = dataRes.data;
+          renderHealthUI(dataRes.data);
+          if (showToast) alert('Health metrics refreshed!');
+        }
+
+        if (statusRes.success && statusRes.settings) {
+          document.getElementById('reportRecipient').value = statusRes.settings.recipient || 'me@faizal.uk';
+          document.getElementById('reportTime').value = statusRes.settings.time || '08:00';
+          document.getElementById('reportEnabledSwitch').checked = statusRes.settings.enabled;
+          
+          if (statusRes.settings.lastSent) {
+            const dateStr = new Date(statusRes.settings.lastSent).toLocaleString();
+            document.getElementById('lastReportInfo').innerHTML = `Last Report Sent: <strong>${dateStr}</strong> to <code style="color:var(--gold);">${statusRes.settings.recipient}</code> (Status: <span class="badge ${statusRes.settings.lastStatus === 'SUCCESS' ? 'badge-success' : 'badge-danger'}">${statusRes.settings.lastStatus}</span>)`;
+          }
+
+          if (statusRes.history && statusRes.history.length > 0) {
+            document.getElementById('reportHistoryBody').innerHTML = statusRes.history.map(h => {
+              const badge = h.overall_health === 'CRITICAL' ? 'badge-danger' : (h.overall_health === 'WARNING' ? 'badge-warning' : 'badge-success');
+              const statusBadge = h.delivery_status === 'SUCCESS' ? 'badge-success' : 'badge-danger';
+              return `<tr>
+                <td>${new Date(h.timestamp).toLocaleString()}</td>
+                <td>${h.recipient}</td>
+                <td><span class="badge ${badge}">${h.overall_health}</span></td>
+                <td>${h.error_count}</td>
+                <td>${h.trigger_source}</td>
+                <td><span class="badge ${statusBadge}">${h.delivery_status}</span></td>
+              </tr>`;
+            }).join('');
+          }
+        }
+      } catch (err) {
+        console.error('Failed to load health data:', err);
+      }
+    }
+
+    function renderHealthUI(data) {
+      document.getElementById('healthHostName').innerText = `${data.hostname} (Linux ${data.release.split('-')[0]})`;
+      document.getElementById('healthLastChecked').innerText = `Last polled: ${new Date().toLocaleTimeString()} • ${data.arch}`;
+
+      const overallBadge = document.getElementById('healthOverallBadge');
+      if (data.overallStatus === 'CRITICAL') {
+        overallBadge.className = 'badge badge-danger';
+        overallBadge.innerText = '🔴 CRITICAL ISSUES';
+      } else if (data.overallStatus === 'WARNING') {
+        overallBadge.className = 'badge badge-warning';
+        overallBadge.innerText = '🟡 WARNINGS DETECTED';
+      } else {
+        overallBadge.className = 'badge badge-success';
+        overallBadge.innerText = '🟢 ALL SYSTEMS OPERATIONAL';
+      }
+
+      // Action items box
+      const issuesBox = document.getElementById('healthIssuesBox');
+      const issuesList = document.getElementById('healthIssuesList');
+      if (data.healthIssues && data.healthIssues.length > 0) {
+        issuesList.innerHTML = data.healthIssues.map(i => `<li>${i}</li>`).join('');
+        issuesBox.style.display = 'block';
+      } else {
+        issuesBox.style.display = 'none';
+      }
+
+      // KPIs
+      document.getElementById('healthUptime').innerText = data.uptimeFormatted;
+      document.getElementById('healthCpuLoad').innerText = `${data.cpu.loadAvg1m}, ${data.cpu.loadAvg5m}`;
+      document.getElementById('healthCpuModel').innerText = `${data.cpu.cores} Cores • ${data.cpu.loadPercent}% utilized`;
+
+      document.getElementById('healthRamVal').innerText = `${data.memory.usedPercent}%`;
+      document.getElementById('healthRamDetails').innerText = `${(data.memory.usedBytes / (1024*1024)).toFixed(0)} MB / ${(data.memory.totalBytes / (1024*1024)).toFixed(0)} MB`;
+      const ramBar = document.getElementById('healthRamBar');
+      ramBar.style.width = `${data.memory.usedPercent}%`;
+      ramBar.style.background = data.memory.usedPercent > 85 ? '#f59e0b' : '#3b82f6';
+
+      document.getElementById('healthDiskVal').innerText = `${data.disk.usedPercent}%`;
+      document.getElementById('healthDiskDetails').innerText = `${(data.disk.availBytes / (1024*1024*1024)).toFixed(1)} GB Free of ${(data.disk.totalBytes / (1024*1024*1024)).toFixed(0)} GB`;
+      const diskBar = document.getElementById('healthDiskBar');
+      diskBar.style.width = `${data.disk.usedPercent}%`;
+      diskBar.style.background = data.disk.usedPercent > 85 ? (data.disk.usedPercent > 92 ? '#ef4444' : '#f59e0b') : '#10b981';
+
+      // Docker Containers
+      document.getElementById('dockerCountBadge').innerText = `${data.dockerSummary.running} Running / ${data.dockerSummary.healthy} Healthy`;
+      if (data.docker && data.docker.length > 0) {
+        document.getElementById('dockerTableBody').innerHTML = data.docker.map(c => {
+          const isHealthy = c.health === 'healthy' || (c.state === 'running' && c.health === 'none');
+          const badgeClass = isHealthy ? 'badge-success' : 'badge-danger';
+          return `<tr>
+            <td><strong>${c.name}</strong></td>
+            <td><small class="muted">${c.image}</small></td>
+            <td><span class="badge ${badgeClass}">${c.health !== 'none' ? c.health : c.state}</span></td>
+            <td>${c.cpu}</td>
+            <td>${c.memory}</td>
+            <td>${c.netIo}</td>
+            <td><small>${c.status}</small></td>
+          </tr>`;
+        }).join('');
+      } else {
+        document.getElementById('dockerTableBody').innerHTML = '<tr><td colspan="7" class="muted">No docker containers found.</td></tr>';
+      }
+
+      // PM2
+      document.getElementById('pm2CountBadge').innerText = `${data.pm2Summary.online} Online / ${data.pm2Summary.total} Total`;
+      if (data.pm2 && data.pm2.length > 0) {
+        document.getElementById('healthPm2Body').innerHTML = data.pm2.map(p => {
+          const isOnline = p.status === 'online';
+          const badgeClass = isOnline ? 'badge-success' : 'badge-danger';
+          return `<tr>
+            <td><strong>${p.name}</strong></td>
+            <td>${p.pid}</td>
+            <td><span class="badge ${badgeClass}">${p.status}</span></td>
+            <td>${p.cpu}%</td>
+            <td>${p.memoryFormatted}</td>
+            <td style="color:${p.restarts > 5 ? '#f59e0b' : 'inherit'}; font-weight:${p.restarts > 5 ? 'bold':'normal'}">${p.restarts}</td>
+            <td>${p.uptimeFormatted}</td>
+          </tr>`;
+        }).join('');
+      }
+
+      // Services Pills
+      if (data.services && data.services.length > 0) {
+        document.getElementById('servicePillsContainer').innerHTML = data.services.map(s => {
+          const isOnline = s.status === 'ONLINE';
+          const color = isOnline ? '#10b981' : '#ef4444';
+          const bg = isOnline ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)';
+          return `<div class="service-pill" style="background:${bg}; border:1px solid ${color}40; color:${color};">
+            <span style="width:7px; height:7px; border-radius:50%; background:${color}; display:inline-block;"></span>
+            <span style="color:#fff;">${s.name} (${s.port})</span>
+            <span style="font-size:10px; font-weight:800;">${s.status}</span>
+          </div>`;
+        }).join('');
+      }
+
+      // Errors
+      document.getElementById('sshBlocksCount').innerText = data.errors24h.sshAuthFailures || 0;
+      document.getElementById('totalIncidentsCount').innerText = data.errors24h.totalErrorCount || 0;
+      
+      let errorsHtml = '';
+      if (data.errors24h.systemd.length > 0) {
+        errorsHtml += `<div style="margin-bottom:10px;"><strong style="color:#f59e0b;font-size:12px;">Systemd Error Log (${data.errors24h.systemd.length} entries):</strong><pre class="debug-console" style="color:#ef4444;max-height:140px;">${data.errors24h.systemd.join('\n')}</pre></div>`;
+      }
+      if (data.errors24h.nginx.length > 0) {
+        errorsHtml += `<div style="margin-bottom:10px;"><strong style="color:#f59e0b;font-size:12px;">Nginx Error Log (${data.errors24h.nginx.length} entries):</strong><pre class="debug-console" style="color:#fca5a5;max-height:140px;">${data.errors24h.nginx.join('\n')}</pre></div>`;
+      }
+      if (data.errors24h.pm2.length > 0) {
+        errorsHtml += `<div><strong style="color:#f59e0b;font-size:12px;">PM2 Error Logs:</strong>`;
+        data.errors24h.pm2.forEach(p => {
+          errorsHtml += `<div style="font-size:11px;color:#94a3b8;margin-top:4px;">${p.file}:</div><pre class="debug-console" style="color:#fca5a5;max-height:100px;">${p.lines.join('\n')}</pre>`;
+        });
+        errorsHtml += '</div>';
+      }
+      if (!errorsHtml) {
+        errorsHtml = '<div style="color:#10b981; padding: 10px; background: rgba(16,185,129,0.08); border-radius:6px;">✓ Zero critical system errors logged in the past 24 hours.</div>';
+      }
+      document.getElementById('healthErrorsContainer').innerHTML = errorsHtml;
+    }
+
+    async function sendReportNow() {
+      const btn = document.getElementById('btnSendReport');
+      const spinner = document.getElementById('sendSpinner');
+      const recipient = document.getElementById('reportRecipient').value.trim();
+
+      if (btn) btn.disabled = true;
+      if (spinner) spinner.style.display = 'inline-block';
+      log(`Sending health report email to ${recipient || 'configured email'}...`);
+
+      try {
+        const res = await api('/api/health-report/send', 'POST', { recipient });
+        if (res.success) {
+          alert(`Success! Health report email dispatched from reports@faizal.uk to ${res.recipient}!\nMessage ID: ${res.messageId}`);
+          loadHealthData();
+        } else {
+          alert(`Failed to send report email: ${res.error}`);
+        }
+      } catch (err) {
+        alert(`Error triggering report: ${err.message}`);
+      } finally {
+        if (btn) btn.disabled = false;
+        if (spinner) spinner.style.display = 'none';
+      }
+    }
+
+    async function saveReportSettings() {
+      const recipient = document.getElementById('reportRecipient').value.trim();
+      const enabled = document.getElementById('reportEnabledSwitch').checked;
+      const time = document.getElementById('reportTime').value.trim();
+
+      try {
+        const res = await api('/api/health-report/config', 'POST', { recipient, enabled, time });
+        if (res.success) {
+          alert('Report settings saved!');
+          loadHealthData();
+        } else {
+          alert('Failed to save settings');
+        }
+      } catch (e) {
+        alert('Error saving settings: ' + e.message);
+      }
+    }
+
+    async function openReportPreview() {
+      const modal = document.getElementById('reportModal');
+      const iframe = document.getElementById('reportPreviewIframe');
+      modal.style.display = 'flex';
+      iframe.srcdoc = '<div style="color:#d4af37;padding:30px;font-family:sans-serif;text-align:center;">Compiling live HTML report preview...</div>';
+      try {
+        const res = await fetch('/api/health-report/preview', {
+          headers: { 'Authorization': auth }
+        });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const html = await res.text();
+        iframe.srcdoc = html;
+      } catch (err) {
+        iframe.srcdoc = `<div style="color:#ef4444;padding:30px;font-family:sans-serif;">Failed to load report preview: ${err.message}</div>`;
+      }
+    }
+
+    function closeReportPreview() {
+      document.getElementById('reportModal').style.display = 'none';
     }
 
     setInterval(() => { if(auth) loadAll(); }, 10000);

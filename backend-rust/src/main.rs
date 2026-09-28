@@ -1,0 +1,131 @@
+mod config;
+mod db;
+mod health;
+mod mailer;
+mod middleware;
+mod models;
+mod routes;
+mod state;
+
+use axum::{
+    middleware::from_fn_with_state,
+    routing::{delete, get, post},
+    Router,
+};
+use config::AppConfig;
+use db::open_database;
+use state::{AppStateInner, SharedState};
+use std::net::SocketAddr;
+use std::sync::Arc;
+use tower_http::cors::CorsLayer;
+use tower_http::services::{ServeDir, ServeFile};
+use tracing::info;
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| "personal_site_rust=info,tower_http=info".into()),
+        )
+        .init();
+
+    let config = AppConfig::from_env();
+    info!("Starting personal-site Rust Axum backend on port {}", config.port);
+    info!("Database path: {:?}", config.db_path);
+    info!("Static SPA path: {:?}", config.static_dir);
+    info!("Public path: {:?}", config.public_dir);
+
+    let db = open_database(&config.db_path)?;
+
+    let state: SharedState = Arc::new(AppStateInner {
+        config: config.clone(),
+        db: db.clone(),
+    });
+
+    // Spawn 24h health report background cron
+    tokio::spawn(health::run_scheduled_reporter(config.clone(), db.clone()));
+
+    // Admin protected sub-router
+    let admin_routes = Router::new()
+        .route("/messages", get(routes::contact::get_messages))
+        .route("/messages/:id", delete(routes::contact::delete_message))
+        .route("/upload-picture", post(routes::profile::upload_profile_pic))
+        .route("/profile-history", get(routes::profile::get_profile_history))
+        .route("/profile-history/:id", delete(routes::profile::delete_profile_pic))
+        .route("/select-profile-pic/:id", post(routes::profile::select_profile_pic))
+        .route("/use-history-pic/:id", post(routes::profile::select_profile_pic))
+        .route("/profile-pic/:id", delete(routes::profile::delete_profile_pic))
+        .route("/projects", post(routes::projects::create_project))
+        .route("/projects/:id", delete(routes::projects::delete_project))
+        .route("/system-stats", get(routes::health_api::get_system_stats))
+        .route("/access-logs", get(routes::security::get_access_logs))
+        .route("/ban-ip", post(routes::security::ban_ip))
+        .route("/banned-ips", get(routes::security::get_banned_ips))
+        .route("/ban-ip/:ip", delete(routes::security::unban_ip))
+        .route("/settings", get(routes::settings::get_settings).post(routes::settings::update_setting))
+        .route("/test-email", post(routes::health_api::test_email))
+        .route("/health-report/data", get(routes::health_api::get_health_data))
+        .route("/health-report/preview", get(routes::health_api::get_health_preview))
+        .route("/health-report/send", post(routes::health_api::send_health_report))
+        .route("/health-report/status", get(routes::health_api::get_health_status))
+        .route("/health-report/config", post(routes::health_api::update_health_config))
+        .route("/health-report/errors", get(routes::health_api::get_health_errors))
+        .layer(from_fn_with_state(
+            state.clone(),
+            middleware::require_admin_middleware,
+        ));
+
+    // Public API sub-router
+    let api_routes = Router::new()
+        .route("/projects", get(routes::projects::list_projects))
+        .route("/project-image/:id", get(routes::projects::get_project_image))
+        .route("/profile-pic", get(routes::profile::get_current_profile_pic))
+        .route("/profile-pic/:id", get(routes::profile::get_profile_pic_by_id))
+        .route("/maintenance-status", get(routes::settings::get_maintenance_status))
+        .route("/theme-config", get(routes::settings::get_theme_config))
+        .route("/track-visit", post(routes::visitors::track_visit))
+        .route("/verify-pin", post(routes::security::verify_pin))
+        .merge(admin_routes);
+
+    // Dynamic uploads directory
+    let uploads_dir = config.public_dir.join("uploads");
+    let _ = std::fs::create_dir_all(&uploads_dir);
+
+    // Static fallback SPA service
+    let spa_index = config.static_dir.join("index.html");
+    let spa_service = if spa_index.exists() {
+        ServeDir::new(&config.static_dir).fallback(ServeFile::new(&spa_index))
+    } else {
+        // Fallback to public if frontend/dist not yet built
+        let public_index = config.public_dir.join("index.html");
+        ServeDir::new(&config.public_dir).fallback(ServeFile::new(&public_index))
+    };
+
+    let admin_file = config.public_dir.join("admin.html");
+
+    let app = Router::new()
+        .route("/save-message", post(routes::contact::save_message))
+        .nest("/api", api_routes)
+        .nest_service("/uploads", ServeDir::new(&uploads_dir))
+        .route_service("/admin.html", ServeFile::new(&admin_file))
+        .fallback_service(spa_service)
+        .layer(from_fn_with_state(
+            state.clone(),
+            middleware::ip_blacklist_middleware,
+        ))
+        .layer(CorsLayer::permissive())
+        .with_state(state);
+
+    let addr = SocketAddr::from(([0, 0, 0, 0], config.port));
+    let listener = tokio::net::TcpListener::bind(addr).await?;
+    info!("Faizal Axum Server successfully listening on http://{}", addr);
+
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .await?;
+
+    Ok(())
+}

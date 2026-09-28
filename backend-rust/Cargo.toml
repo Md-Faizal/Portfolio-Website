@@ -1,0 +1,28 @@
+[package]
+name = "personal-site-rust"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+axum = { version = "0.7", features = ["multipart"] }
+tokio = { version = "1", features = ["full"] }
+tower = "0.4"
+tower-http = { version = "0.5", features = ["fs", "cors", "trace"] }
+# bundled = compiles SQLite from source (no host lib needed inside Docker)
+rusqlite = { version = "0.31", features = ["bundled"] }
+# lettre with rustls (no OpenSSL dependency — smaller image, musl-compatible)
+lettre = { version = "0.11", default-features = false, features = ["tokio1-rustls-tls", "builder", "smtp-transport"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+sysinfo = { version = "0.31", default-features = false, features = ["system", "disk"] }
+chrono = { version = "0.4", features = ["serde"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[profile.release]
+# Maximum optimisation for size + speed
+opt-level = "z"        # Optimise for binary size (smaller than opt-level=3 at runtime)
+lto = "thin"           # Thin LTO: faster compile than "fat", still eliminates dead code
+codegen-units = 1      # Single codegen unit for maximum inlining
+panic = "abort"        # No unwinding machinery — saves ~50KB
+strip = true           # Strip all symbols (debug + symbol table)

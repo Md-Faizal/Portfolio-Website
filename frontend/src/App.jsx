@@ -180,13 +180,10 @@ function App() {
 
     const sectionIds = [
       'section-hero',
-      'section-projects',
-      'section-proof',
+      'section-marquee1',
       'section-services',
-      'section-quote',
-      'section-reel',
-      'section-cta',
-      'section-showcase'
+      'section-approach-note',
+      'section-cta'
     ];
 
     const observer = new IntersectionObserver(
@@ -304,18 +301,11 @@ function App() {
     const key = String(name).toLowerCase().trim();
     const sectionMap = {
       'hero': { id: 'section-hero', label: 'Hero (01)' },
-      'marquee1': { id: 'section-marquee1', label: 'Marquee 1' },
-      'projects': { id: 'section-projects', label: 'Projects / Works (03)' },
-      'work': { id: 'section-projects', label: 'Projects / Works (03)' },
-      'proof': { id: 'section-proof', label: 'Proof / Trusted By (04)' },
-      'marquee2': { id: 'section-marquee2', label: 'Marquee 2' },
-      'services': { id: 'section-services', label: 'Services (06)' },
-      'quote': { id: 'section-quote', label: 'Quote Section (07)' },
-      'reel': { id: 'section-reel', label: 'Reel Video (08)' },
-      'video': { id: 'section-reel', label: 'Reel Video (08)' },
-      'cta': { id: 'section-cta', label: 'CTA / Contact (09)' },
-      'contact': { id: 'section-cta', label: 'CTA / Contact (09)' },
-      'showcase': { id: 'section-showcase', label: 'Showcase / Imagery (10)' }
+      'marquee1': { id: 'section-marquee1', label: 'Works transition' },
+      'services': { id: 'section-services', label: 'Services' },
+      'approach': { id: 'section-approach-note', label: 'Approach note' },
+      'cta': { id: 'section-cta', label: 'Work / Contact' },
+      'contact': { id: 'section-cta', label: 'Work / Contact' }
     };
 
     const target = sectionMap[key] || { id: `section-${key}`, label: key };
@@ -563,7 +553,7 @@ function App() {
       default:
         return (
           <Home 
-            isRevealed={heroRevealed || freezeStage === 'home'} 
+            isRevealed={heroRevealed || liveLoaderPhase === 'EXPANDING' || freezeStage === 'home'} 
             onOpenMenu={() => setIsMenuOpen(true)}
             isMenuOpen={isMenuOpen}
             onNavigate={handleNavigate}
@@ -573,7 +563,7 @@ function App() {
           />
         );
     }
-  }, [heroRevealed, freezeStage, introDone, isMenuOpen, handleNavigate, handleHomeLogoClick, isNavigating]);
+  }, [heroRevealed, liveLoaderPhase, freezeStage, introDone, isMenuOpen, handleNavigate, handleHomeLogoClick, isNavigating]);
 
   return (
     <ThemeProvider>

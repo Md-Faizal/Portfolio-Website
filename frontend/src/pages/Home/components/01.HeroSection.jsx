@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import PageHeader from '../../../components/common/PageHeader';
-import heroStockVideo from '../../../assets/videos/16132994_3840_2160_60fps.mp4';
+import ThreeScene from './ThreeScene';
 
 const THEME_COLOR = '#A30033'; // Deep crimson red matching the logo
 
@@ -187,11 +187,11 @@ function ConcentricBackground({
         >
           {rings.map((ring) => {
             // 1. Initial reveal wave: radiates from innermost ring (i=0) -> outermost ring (i=ringCount-1)
-            const appearDelay = 0.05 + ring.index * 0.026;
+            const appearDelay = ring.index === 0 ? 0 : 0.05 + ring.index * 0.015;
             // 2. Inverse dissolution wave: collapses into porcelain starting from innermost (i=0) -> outermost (i=ringCount-1)
-            const collapseDelay = 0.05 + ring.index * 0.028;
+            const collapseDelay = ring.index === 0 ? 0 : 0.05 + ring.index * 0.020;
 
-            const shouldShowRing = isStableView || (isRadiating && !isFullscreenVideo);
+            const shouldShowRing = (!isFullscreenVideo && ring.index === 0) || isStableView || (isRadiating && !isFullscreenVideo);
 
             return (
               <motion.circle
@@ -201,8 +201,8 @@ function ConcentricBackground({
                 r={ring.radius}
                 stroke={ring.stroke}
                 initial={isStableView ? false : {
-                  opacity: 0,
-                  strokeWidth: 0
+                  opacity: ring.index === 0 ? ring.targetOpacity : 0,
+                  strokeWidth: ring.index === 0 ? ring.strokeWidth : 0
                 }}
                 animate={shouldShowRing ? {
                   opacity: ring.targetOpacity,
@@ -242,8 +242,22 @@ export default function HeroSection({
   onNavigate, 
   onLogoClick,
   isTransitioning = false,
-  isPageReady = true
+  isPageReady = true,
+  isFreeCam: propFreeCam = false
 }) {
+  const [isFreeCam, setIsFreeCam] = useState(propFreeCam);
+
+  useEffect(() => {
+    setIsFreeCam(propFreeCam);
+  }, [propFreeCam]);
+
+  useEffect(() => {
+    const handleToggle = (e) => {
+      setIsFreeCam(Boolean(e?.detail?.enabled));
+    };
+    window.addEventListener('toggle-dev-freecam', handleToggle);
+    return () => window.removeEventListener('toggle-dev-freecam', handleToggle);
+  }, []);
   // Master Choreography Stages:
   // 1. 'logo': (0s - 1.8s) Concentric rings radiate out + red logo in center
   // 2. 'video-portal': (1.8s - 5.8s, 4.0s duration) Red logo fades out; stock video plays inside center circle portal for 4 seconds
@@ -282,25 +296,21 @@ export default function HeroSection({
     }
 
     // Timeline Sequence:
-    // T = 1.8s: Red logo disappears; video portal opens & top-left header logo emerges
+    // T = 0.5s: Red logo disappears; 3D portal opens & top-left header logo emerges
     const portalTimer = setTimeout(() => {
       setHeroStage('video-portal');
       setHeaderLogoStage('red');
-      if (videoRef.current) {
-        videoRef.current.play().catch(() => {});
-      }
-    }, 1800);
+    }, 500);
 
-    // T = 2.4s: Top-left header logo transitions from red to lime
+    // T = 1.0s: Top-left header logo transitions from red to lime
     const limeLogoTimer = setTimeout(() => {
       setHeaderLogoStage('lime');
-    }, 2400);
+    }, 1000);
 
-    // T = 5.8s (1.8s + 4.0s of video inside circular portal):
-    // Concentric circles dissolve in reverse from inside to outside, revealing full video frame!
+    // T = 1.5s: Concentric circles dissolve outward, expanding full 3D studio frame!
     const fullscreenVideoTimer = setTimeout(() => {
       setHeroStage('video-fullscreen');
-    }, 5800);
+    }, 1500);
 
     return () => {
       clearTimeout(portalTimer);
@@ -309,11 +319,10 @@ export default function HeroSection({
     };
   }, [isRevealed, isTransitioning]);
 
-  const showCenterLogo = isRevealed && (isTransitioning || heroStage === 'logo');
-  const showTopLeftLogo = isRevealed && !isTransitioning && (headerLogoStage === 'red' || headerLogoStage === 'lime');
-
   const isFullscreen = !isTransitioning && heroStage === 'video-fullscreen';
-  const isVideoActive = isRevealed && !isTransitioning && (heroStage === 'video-portal' || heroStage === 'video-fullscreen');
+  const showCenterLogo = !isFullscreen && heroStage === 'logo';
+  const showTopLeftLogo = isRevealed && !isTransitioning && (headerLogoStage === 'red' || headerLogoStage === 'lime');
+  const isVideoActive = (heroStage === 'video-portal' || heroStage === 'video-fullscreen');
 
   return (
     <section
@@ -327,26 +336,15 @@ export default function HeroSection({
         overflow: 'hidden'
       }}
     >
-      {/* 1. CINEMATIC 4K VIDEO (Playing behind porcelain SVG aperture mask) */}
+      {/* 1. MINIMALIST 3D STUDIO (Playing behind porcelain SVG aperture mask) */}
       <div
-        className="absolute inset-0 w-full h-full z-0 flex items-center justify-center overflow-hidden pointer-events-none"
+        className="absolute inset-0 w-full h-full z-0 flex items-center justify-center overflow-hidden"
         style={{
-          opacity: isRevealed && !isTransitioning ? 1 : 0,
-          transition: isTransitioning ? 'none' : 'opacity 0.4s ease'
+          opacity: 1,
+          pointerEvents: isFreeCam ? 'auto' : 'none'
         }}
       >
-        <video
-          ref={videoRef}
-          src={heroStockVideo}
-          className="w-full h-full object-cover select-none pointer-events-none"
-          autoPlay
-          loop
-          muted
-          playsInline
-          preload="auto"
-        >
-          <source src={heroStockVideo} type="video/mp4" />
-        </video>
+        <ThreeScene isFullscreen={isFullscreen} isActive={isVideoActive} isFreeCam={isFreeCam} />
       </div>
 
       {/* 2. CONCENTRIC PORCELAIN BACKGROUND & DEPTH CIRCLES WITH STEP-BY-STEP APERTURE MASK */}
@@ -360,14 +358,14 @@ export default function HeroSection({
 
       {/* 3. MAIN CENTER RED MONOGRAM LOGO */}
       <motion.div 
-        initial={false}
+        initial={{ opacity: 1, scale: 1, y: 0 }}
         animate={{ 
           opacity: showCenterLogo ? 1 : 0, 
           scale: showCenterLogo ? 1 : 0.92,
           y: showCenterLogo ? 0 : -8
         }}
         transition={{ 
-          duration: showCenterLogo ? (isTransitioning ? 0 : 0.4) : 0.65, 
+          duration: showCenterLogo ? (isTransitioning ? 0 : 0.4) : 0.45, 
           ease: [0.16, 1, 0.3, 1] 
         }}
         style={{ 

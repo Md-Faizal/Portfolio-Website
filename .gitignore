@@ -1,0 +1,29 @@
+# Dependencies
+node_modules/
+package-lock.json
+
+# Rust build artifacts
+target/
+backend-rust/target/
+personal-site-rust
+
+# Production builds
+dist/
+frontend/dist/
+
+# Logs and environment
+*.log
+.env
+.env.*
+!.env.example
+
+# Local SQLite databases
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# OS & Editor
+.DS_Store
+Thumbs.db
+.vscode/

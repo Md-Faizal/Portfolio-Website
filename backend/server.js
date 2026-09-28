@@ -7,6 +7,7 @@ const fs = require('fs');
 const os = require('os');
 const { exec } = require('child_process');
 const nodemailer = require('nodemailer');
+const { collectSystemHealth, generateReportHtml, sendReportEmail } = require('./healthReporter');
 
 const app = express();
 const PORT = process.env.PORT || 3002;
@@ -58,7 +59,7 @@ const upload = multer({ storage });
 
 // Admin Authentication Middleware
 const requireAdmin = (req, res, next) => {
-    const pin = req.headers['authorization'];
+    const pin = req.headers['authorization'] || req.query.pin;
     if (pin === '2004') {
         next();
     } else {
@@ -177,7 +178,17 @@ async function getTransporter() {
                     auth: { user: email, pass: pass }
                 }));
             } else {
-                resolve(null);
+                // Primary: Brevo SMTP Relay on port 587 (bypasses Oracle port 25 block)
+                // Fallback: Local Stalwart on 127.0.0.1:465
+                resolve(nodemailer.createTransport({
+                    host: 'smtp-relay.brevo.com',
+                    port: 587,
+                    secure: false,
+                    auth: {
+                        user: 'bb6408001@smtp-brevo.com',
+                        pass: 'xsmtpsib-73f7e08afbd853d9e9d2e8c2049f93badd7e7f2b34e3e9de937eee1a307cace3-cmEy8jEk90T1HM6Z'
+                    }
+                }));
             }
         });
     });
@@ -508,6 +519,88 @@ app.delete('/api/messages/:id', requireAdmin, (req, res) => {
         }
         res.status(200).json({ success: true });
     });
+});
+
+// ==========================================
+// VM HEALTH & 24-HOUR REPORTING API ENDPOINTS
+// ==========================================
+
+// Route to fetch real-time full VM Health and Performance data
+app.get('/api/health-report/data', requireAdmin, async (req, res) => {
+    try {
+        const data = await collectSystemHealth();
+        res.json({ success: true, data });
+    } catch (err) {
+        console.error('Health data error:', err);
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// Route to fetch rendered HTML report preview
+app.get('/api/health-report/preview', requireAdmin, async (req, res) => {
+    try {
+        const data = await collectSystemHealth();
+        const html = generateReportHtml(data);
+        res.setHeader('Content-Type', 'text/html');
+        res.send(html);
+    } catch (err) {
+        res.status(500).send(`Error generating preview: ${err.message}`);
+    }
+});
+
+// Route to trigger sending health report email immediately
+app.post('/api/health-report/send', requireAdmin, async (req, res) => {
+    try {
+        const { recipient } = req.body || {};
+        const result = await sendReportEmail({ recipient, trigger: 'admin_dashboard' });
+        res.json(result);
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// Route to fetch health report configuration, status, and history
+app.get('/api/health-report/status', requireAdmin, (req, res) => {
+    db.all(`SELECT key, value FROM settings WHERE key IN ('report_recipient_email', 'report_enabled', 'report_time', 'last_report_timestamp', 'last_report_status')`, (err, rows) => {
+        const settings = {};
+        if (rows) {
+            rows.forEach(r => settings[r.key] = r.value);
+        }
+        db.all(`SELECT * FROM health_reports ORDER BY timestamp DESC LIMIT 15`, (err2, reports) => {
+            res.json({
+                success: true,
+                settings: {
+                    recipient: settings.report_recipient_email || 'me@faizal.uk',
+                    enabled: settings.report_enabled !== 'false',
+                    time: settings.report_time || '08:00',
+                    lastSent: settings.last_report_timestamp || null,
+                    lastStatus: settings.last_report_status || null
+                },
+                history: reports || []
+            });
+        });
+    });
+});
+
+// Route to update report configuration
+app.post('/api/health-report/config', requireAdmin, (req, res) => {
+    const { recipient, enabled, time } = req.body || {};
+    db.serialize(() => {
+        if (recipient !== undefined) db.run(`INSERT OR REPLACE INTO settings (key, value) VALUES ('report_recipient_email', ?)`, [recipient]);
+        if (enabled !== undefined) db.run(`INSERT OR REPLACE INTO settings (key, value) VALUES ('report_enabled', ?)`, [String(enabled)]);
+        if (time !== undefined) db.run(`INSERT OR REPLACE INTO settings (key, value) VALUES ('report_time', ?)`, [time]);
+        res.json({ success: true, message: 'Health report settings updated.' });
+    });
+});
+
+// Route to fetch 24-hour error log summary
+app.get('/api/health-report/errors', requireAdmin, async (req, res) => {
+    try {
+        const data = await collectSystemHealth();
+        res.json({ success: true, errors: data.errors24h, healthIssues: data.healthIssues });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
 });
 
 // Start the server

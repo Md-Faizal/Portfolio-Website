@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion } from 'framer-motion';
 
 /**
@@ -105,6 +105,16 @@ export default function DevFloatingHUD({
   const [scrubberVal, setScrubberVal] = useState(masterPercent || 0);
   const isDraggingMasterRef = useRef(false);
 
+  // 3D Studio Free-Cam Orbit Tool
+  const [isFreeCam, setIsFreeCam] = useState(false);
+  const toggleFreeCam = useCallback((targetState) => {
+    setIsFreeCam((prev) => {
+      const next = typeof targetState === 'boolean' ? targetState : !prev;
+      window.dispatchEvent(new CustomEvent('toggle-dev-freecam', { detail: { enabled: next } }));
+      return next;
+    });
+  }, []);
+
   // Synchronize master scrubber ONLY when not actively dragging
   useEffect(() => {
     if (!isDraggingMasterRef.current) {
@@ -120,6 +130,12 @@ export default function DevFloatingHUD({
       if (e.key === '`' || (e.shiftKey && (e.key === 'D' || e.key === 'd'))) {
         e.preventDefault();
         toggleHUD((prev) => !prev);
+      }
+
+      // Shift + C: Toggle 3D Free Camera View
+      if (e.shiftKey && (e.key === 'C' || e.key === 'c')) {
+        e.preventDefault();
+        toggleFreeCam();
       }
 
       if (e.shiftKey && e.key === '1') {
@@ -140,13 +156,14 @@ export default function DevFloatingHUD({
       }
       if (e.shiftKey && e.code === 'Space') {
         e.preventDefault();
-        onTogglePlay ? onTogglePlay() : onResume();
+        if (onTogglePlay) onTogglePlay();
+        else onResume();
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [onFreezeLoader, onFreezeLogo, onFreezeExpansion, onFreezeHome, onTogglePlay, onResume]);
+  }, [onFreezeLoader, onFreezeLogo, onFreezeExpansion, onFreezeHome, onTogglePlay, onResume, toggleFreeCam]);
 
   if (!isOpen) {
     return null;
@@ -244,6 +261,24 @@ export default function DevFloatingHUD({
               }}
             >
               {activeStage === 'logo' ? 'MONOGRAM' : (activeStage === 'expansion' ? 'Z-EXPANSION' : activeStage)}
+            </span>
+          )}
+
+          {isFreeCam && (
+            <span
+              style={{
+                backgroundColor: 'rgba(2, 132, 199, 0.3)',
+                color: '#38bdf8',
+                border: '1px solid #38bdf8',
+                borderRadius: '4px',
+                padding: '1px 5px',
+                fontSize: '0.6rem',
+                fontWeight: 800,
+                boxShadow: '0 0 10px rgba(56, 189, 248, 0.4)'
+              }}
+              title="3D Free-Cam is currently active"
+            >
+              🎥 FREE-CAM
             </span>
           )}
 
@@ -608,7 +643,51 @@ export default function DevFloatingHUD({
             )}
           </div>
 
-          {/* 5. PLAYBACK SPEED SUITE */}
+          {/* 5. 3D STUDIO FREE-CAM ORBIT TOOL */}
+          <div style={{ backgroundColor: isFreeCam ? 'rgba(56, 189, 248, 0.12)' : 'rgba(255, 255, 255, 0.03)', padding: '0.65rem 0.75rem', borderRadius: '10px', border: `1px solid ${isFreeCam ? '#38bdf8' : 'rgba(255, 255, 255, 0.08)'}`, transition: 'all 0.2s ease' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
+              <span style={{ fontSize: '0.66rem', color: isFreeCam ? '#38bdf8' : '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 800 }}>
+                🎥 3D STUDIO FREE-CAM
+              </span>
+              <span style={{ fontSize: '0.62rem', color: '#64748b', fontFamily: 'monospace' }}>
+                Shift+C
+              </span>
+            </div>
+
+            <button
+              onClick={() => toggleFreeCam()}
+              style={{
+                width: '100%',
+                padding: '0.5rem',
+                backgroundColor: isFreeCam ? '#0284c7' : 'rgba(255, 255, 255, 0.05)',
+                color: '#ffffff',
+                border: isFreeCam ? '1px solid #38bdf8' : '1px solid rgba(255, 255, 255, 0.1)',
+                borderRadius: '6px',
+                fontSize: '0.74rem',
+                fontWeight: 700,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px',
+                boxShadow: isFreeCam ? '0 0 16px rgba(56, 189, 248, 0.45)' : 'none',
+                transition: 'all 0.2s ease'
+              }}
+              title="Click or press Shift+C to freely orbit, rotate, pan, and zoom the camera around the 3D studio with your mouse"
+            >
+              <span>{isFreeCam ? '🔓 Free-Cam ACTIVE (Drag to Orbit)' : '🔒 Enable Free Mouse Orbit'}</span>
+            </button>
+
+            {isFreeCam && (
+              <div style={{ marginTop: '6px', fontSize: '0.62rem', color: '#94a3b8', display: 'flex', justifyContent: 'space-between' }}>
+                <span>• Left Drag: Rotate 360°</span>
+                <span>• Scroll: Zoom In/Out</span>
+                <span>• Right Drag: Pan</span>
+              </div>
+            )}
+          </div>
+
+          {/* 6. PLAYBACK SPEED SUITE */}
           <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
               <span style={{ fontSize: '0.66rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 700 }}>

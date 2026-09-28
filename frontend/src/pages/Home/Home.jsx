@@ -1,14 +1,10 @@
 import React, { useEffect } from 'react';
-import HeroSection from './components/HeroSection';
-import Marquee1Section from './components/Marquee1Section';
-import ProjectsSection from './components/ProjectsSection';
-import ProofSection from './components/ProofSection';
-import Marquee2Section from './components/Marquee2Section';
-import ServicesSection from './components/ServicesSection';
-import QuoteSection from './components/QuoteSection';
-import ReelSection from './components/ReelSection';
-import CtaSection from './components/CtaSection';
-import ShowcaseSection from './components/ShowcaseSection';
+import HeroSection from './components/01.HeroSection';
+import Marquee1Section from './components/02.Marquee1Section';
+import ServicesSection from './components/03.ServicesSection';
+import ApproachNoteSection from './components/04.ApproachNoteSection';
+import ContactSection from './components/05.ContactSection';
+import SiteFooter from './components/06.SiteFooter';
 
 export default function Home({ 
   isRevealed, 
@@ -48,41 +44,10 @@ export default function Home({
       <div id="section-marquee1">
         <Marquee1Section />
       </div>
-
-      <div id="section-projects">
-        <ProjectsSection />
-      </div>
-
-      <div id="section-proof">
-        <ProofSection />
-      </div>
-
-      <div id="section-marquee2">
-        <Marquee2Section />
-      </div>
-
-      <div id="section-services">
-        <ServicesSection />
-      </div>
-
-      <div id="section-quote">
-        <QuoteSection />
-      </div>
-
-      {/* Custom Cursor / Bubble */}
-      <div className="fixed z-100 hidden size-10 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-[#434343]/20 bg-white text-[#434343] shadow-[0_0_0_3px_#fff] pointer-events-none transition-[opacity,scale] duration-300 ease-in-out-expo md:flex scale-10 opacity-0"></div>
-
-      <div id="section-reel">
-        <ReelSection />
-      </div>
-
-      <div id="section-cta">
-        <CtaSection />
-      </div>
-
-      <div id="section-showcase">
-        <ShowcaseSection />
-      </div>
+      <ServicesSection onNavigate={onNavigate} />
+      <ApproachNoteSection />
+      <ContactSection onNavigate={onNavigate} />
+      <SiteFooter onNavigate={onNavigate} />
     </main>
   );
 }

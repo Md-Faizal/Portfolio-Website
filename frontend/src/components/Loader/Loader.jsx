@@ -132,7 +132,7 @@ export default function Loader({
             }
           }, 50);
         }
-      }, 2000 / spd);
+      }, 900 / spd);
 
       return () => {
         clearTimeout(monogramTimer);

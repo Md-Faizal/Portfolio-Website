@@ -183,6 +183,7 @@ cd '$UBUNTU_PROD_DIR'
 for item in */; do
     case \"\$item\" in
         backups/)       ;;
+        mail/)          ;;
         backend/)
             find backend/ -mindepth 1 -maxdepth 1 ! -name 'Messages' ! -name 'messages' ! -name '*.db' -exec rm -rf {} + 2>/dev/null || true
             ;;
@@ -210,6 +211,9 @@ if [ "$DRY_RUN" = false ]; then
             --exclude='backend/Messages' \
             --exclude='backend/messages' \
             --exclude='backend/*.db' \
+            --exclude='mail/mail-data' \
+            --exclude='mail/mail-state' \
+            --exclude='mail/mail-logs' \
             --exclude='node_modules' \
             --exclude='backups' \
             --exclude='.git' \
