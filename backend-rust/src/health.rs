@@ -44,30 +44,6 @@ pub struct DiskData {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
-pub struct Pm2Process {
-    pub name: String,
-    pub id: i64,
-    pub pid: i64,
-    pub status: String,
-    pub cpu: f64,
-    pub memory_bytes: u64,
-    pub memory_formatted: String,
-    pub restarts: i64,
-    pub uptime_formatted: String,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-#[serde(rename_all = "camelCase")]
-pub struct Pm2Summary {
-    pub total: usize,
-    pub online: usize,
-    pub errored: usize,
-    pub stopped: usize,
-    pub total_memory_bytes: u64,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-#[serde(rename_all = "camelCase")]
 pub struct DockerContainer {
     pub id: String,
     pub name: String,
@@ -102,17 +78,9 @@ pub struct ServiceProbe {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
-pub struct Pm2LogFile {
-    pub file: String,
-    pub lines: Vec<String>,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-#[serde(rename_all = "camelCase")]
 pub struct Errors24h {
     pub systemd: Vec<String>,
     pub nginx: Vec<String>,
-    pub pm2: Vec<Pm2LogFile>,
     pub kernel: Vec<String>,
     pub ssh_auth_failures: usize,
     pub total_error_count: usize,
@@ -142,8 +110,7 @@ pub struct SystemHealthData {
     pub cpu: CpuData,
     pub memory: MemoryData,
     pub disk: DiskData,
-    pub pm2: Vec<Pm2Process>,
-    pub pm2_summary: Pm2Summary,
+    pub slave: Option<serde_json::Value>,
     pub docker: Vec<DockerContainer>,
     pub docker_summary: DockerSummary,
     pub services: Vec<ServiceProbe>,
@@ -275,56 +242,37 @@ pub async fn collect_system_health(db: &DbPool) -> SystemHealthData {
 
     let mut health_issues = Vec::new();
 
-    // PM2 Inspection
-    let mut pm2_list = Vec::new();
-    let mut pm2_summary = Pm2Summary { total: 0, online: 0, errored: 0, stopped: 0, total_memory_bytes: 0 };
-    if let Some(stdout) = run_cmd("pm2 jlist") {
-        if let Ok(val) = serde_json::from_str::<serde_json::Value>(&stdout) {
-            if let Some(arr) = val.as_array() {
-                pm2_summary.total = arr.len();
-                for p in arr {
-                    let name = p["name"].as_str().unwrap_or("unknown").to_string();
-                    let status = p["pm2_env"]["status"].as_str().unwrap_or("stopped").to_string();
-                    let mem = p["monit"]["memory"].as_u64().unwrap_or(0);
-                    let cpu = p["monit"]["cpu"].as_f64().unwrap_or(0.0);
-                    let restarts = p["pm2_env"]["restart_time"].as_i64().unwrap_or(0);
-                    let pm_uptime = p["pm2_env"]["pm_uptime"].as_i64().unwrap_or(0);
-                    let up_secs = if pm_uptime > 0 {
-                        ((chrono::Utc::now().timestamp_millis() - pm_uptime) / 1000).max(0) as u64
+    // Query Cluster Slave Node (container-of-souls via 127.0.0.1:9100 tunnel)
+    let slave_data: Option<serde_json::Value> = {
+        let connect_res = tokio::time::timeout(
+            std::time::Duration::from_millis(1500),
+            tokio::net::TcpStream::connect("127.0.0.1:9100"),
+        )
+        .await;
+
+        if let Ok(Ok(mut stream)) = connect_res {
+            use tokio::io::{AsyncReadExt, AsyncWriteExt};
+            let req = "GET /stats HTTP/1.1\r\nHost: 127.0.0.1:9100\r\nConnection: close\r\n\r\n";
+            if stream.write_all(req.as_bytes()).await.is_ok() {
+                let mut buf = Vec::new();
+                if stream.read_to_end(&mut buf).await.is_ok() {
+                    let response = String::from_utf8_lossy(&buf);
+                    let body = if let Some(pos) = response.find("\r\n\r\n") {
+                        &response[pos + 4..]
                     } else {
-                        0
+                        &response
                     };
-
-                    if status == "online" {
-                        pm2_summary.online += 1;
-                    } else if status == "errored" {
-                        pm2_summary.errored += 1;
-                        health_issues.push(format!("PM2 process '{}' is in ERRORED state!", name));
-                    } else {
-                        pm2_summary.stopped += 1;
-                    }
-
-                    if restarts > 50 {
-                        health_issues.push(format!("PM2 process '{}' has excessive restarts ({})", name, restarts));
-                    }
-
-                    pm2_summary.total_memory_bytes += mem;
-
-                    pm2_list.push(Pm2Process {
-                        name,
-                        id: p["pm_id"].as_i64().unwrap_or(0),
-                        pid: p["pid"].as_i64().unwrap_or(0),
-                        status,
-                        cpu,
-                        memory_bytes: mem,
-                        memory_formatted: format_bytes(mem),
-                        restarts,
-                        uptime_formatted: format_uptime(up_secs),
-                    });
+                    serde_json::from_str::<serde_json::Value>(body.trim()).ok()
+                } else {
+                    None
                 }
+            } else {
+                None
             }
+        } else {
+            None
         }
-    }
+    };
 
     // Docker Inspection
     let mut docker_list = Vec::new();
@@ -508,9 +456,26 @@ pub async fn collect_system_health(db: &DbPool) -> SystemHealthData {
         health_issues.push(format!("RAM usage elevated: {}%", mem_used_pct));
     }
 
-    if pm2_summary.errored > 0 || docker_summary.unhealthy > 0 {
+    if docker_summary.unhealthy > 0 {
         overall_status = "CRITICAL".into();
-    } else if !health_issues.is_empty() && overall_status == "HEALTHY" {
+        health_issues.push(format!("Docker reports {} unhealthy container(s)", docker_summary.unhealthy));
+    }
+
+    if let Some(ref slave) = slave_data {
+        if slave.get("status").and_then(|s| s.as_str()) != Some("online") {
+            health_issues.push("Cluster Slave Node (container-of-souls) is unreachable or degraded!".into());
+            if overall_status == "HEALTHY" {
+                overall_status = "WARNING".into();
+            }
+        }
+    } else {
+        health_issues.push("Cluster Slave Node probe unreachable via 127.0.0.1:9100 tunnel!".into());
+        if overall_status == "HEALTHY" {
+            overall_status = "WARNING".into();
+        }
+    }
+
+    if !health_issues.is_empty() && overall_status == "HEALTHY" {
         overall_status = "WARNING".into();
     }
 
@@ -546,15 +511,13 @@ pub async fn collect_system_health(db: &DbPool) -> SystemHealthData {
             avail_bytes: disk_avail,
             used_percent: disk_used_pct,
         },
-        pm2: pm2_list,
-        pm2_summary,
+        slave: slave_data,
         docker: docker_list,
         docker_summary,
         services,
         errors24h: Errors24h {
             systemd: systemd_errors,
             nginx: nginx_errors,
-            pm2: Vec::new(),
             kernel: kernel_errors,
             ssh_auth_failures: ssh_failures,
             total_error_count: total_err_count,
@@ -580,7 +543,7 @@ pub fn generate_report_html(data: &SystemHealthData) -> String {
     };
 
     let issues_html = if data.health_issues.is_empty() {
-        r#"<div style="background: rgba(137, 255, 0, 0.06); border: 1px solid rgba(137, 255, 0, 0.2); border-radius: 8px; padding: 12px 16px; color: #89ff00; font-size: 13px; font-family: monospace;">
+        r#"<div style="background: rgba(137, 255, 0, 0.06); border: 1px solid rgba(137, 255, 0, 0.2); border-radius: 12px; padding: 14px 18px; color: #89ff00; font-size: 13px; font-family: monospace;">
             ✓ Zero critical health anomalies detected across cluster nodes in the past 24 hours.
         </div>"#.to_string()
     } else {
@@ -589,37 +552,8 @@ pub fn generate_report_html(data: &SystemHealthData) -> String {
             .map(|i| format!(r#"<li style="color: #ff3366; margin-bottom: 6px; font-family: monospace; font-size: 13px;">⚠ {}</li>"#, i))
             .collect::<Vec<_>>()
             .join("");
-        format!(r#"<div style="background: rgba(255, 51, 102, 0.08); border-left: 3px solid #ff3366; border-radius: 8px; padding: 14px 16px;"><ul style="margin: 0; padding-left: 20px;">{}</ul></div>"#, items)
+        format!(r#"<div style="background: rgba(255, 51, 102, 0.08); border-left: 3px solid #ff3366; border-radius: 12px; padding: 16px 20px;"><ul style="margin: 0; padding-left: 20px;">{}</ul></div>"#, items)
     };
-
-    let pm2_rows = data.pm2.iter().map(|p| {
-        let is_online = p.status == "online";
-        let color = if is_online { "#89ff00" } else { "#ff3366" };
-        let dot_color = if is_online { "#89ff00" } else { "#ff3366" };
-        format!(
-            r#"<tr style="border-bottom: 1px solid rgba(255, 255, 255, 0.06);">
-                <td style="padding: 10px 12px; font-weight: 600; color: #ffffff; font-family: monospace; font-size: 13px;">{}</td>
-                <td style="padding: 10px 12px;"><span style="display:inline-flex; align-items:center; padding: 3px 8px; border-radius: 6px; font-size: 11px; font-weight: 700; font-family: monospace; background: rgba(255,255,255,0.04); color: {}; border: 1px solid rgba(255,255,255,0.08);"><span style="display:inline-block; width:6px; height:6px; border-radius:50%; background:{}; margin-right:6px;"></span>{}</span></td>
-                <td style="padding: 10px 12px; color: #cbd5e1; font-family: monospace; font-size: 13px;">{}%</td>
-                <td style="padding: 10px 12px; color: #cbd5e1; font-family: monospace; font-size: 13px;">{}</td>
-                <td style="padding: 10px 12px; color: #94a3b8; font-family: monospace; font-size: 12px;">{}</td>
-            </tr>"#,
-            p.name, color, dot_color, p.status.to_uppercase(), p.cpu, p.memory_formatted, p.uptime_formatted
-        )
-    }).collect::<Vec<_>>().join("");
-
-    let docker_rows = data.docker.iter().map(|c| {
-        let is_healthy = c.health == "healthy" || (c.state == "running" && c.health == "none");
-        let color = if is_healthy { "#89ff00" } else { "#ff3366" };
-        format!(
-            r#"<tr style="border-bottom: 1px solid rgba(255, 255, 255, 0.06);">
-                <td style="padding: 10px 12px; font-weight: 600; color: #ffffff; font-family: monospace; font-size: 13px;">{}</td>
-                <td style="padding: 10px 12px; color: #94a3b8; font-family: monospace; font-size: 12px;">{}</td>
-                <td style="padding: 10px 12px;"><span style="display:inline-flex; align-items:center; padding: 3px 8px; border-radius: 6px; font-size: 11px; font-weight: 700; font-family: monospace; background: rgba(255,255,255,0.04); color: {}; border: 1px solid rgba(255,255,255,0.08);"><span style="display:inline-block; width:6px; height:6px; border-radius:50%; background:{}; margin-right:6px;"></span>{}</span></td>
-            </tr>"#,
-            c.name, c.image, color, color, c.state.to_uppercase()
-        )
-    }).collect::<Vec<_>>().join("");
 
     let cpu_pct = data.cpu.load_percent.min(100);
     let mem_pct = data.memory.used_percent.min(100);
@@ -628,6 +562,144 @@ pub fn generate_report_html(data: &SystemHealthData) -> String {
     let cpu_bar_color = if cpu_pct > 85 { "#ff3366" } else { "#89ff00" };
     let mem_bar_color = if mem_pct > 85 { "#ff3366" } else { "#89ff00" };
     let disk_bar_color = if disk_pct > 85 { "#ff3366" } else { "#89ff00" };
+
+    // Slave Node Telemetry
+    let slave_section = if let Some(ref slave) = data.slave {
+        let is_online = slave.get("status").and_then(|s| s.as_str()) == Some("online");
+        let badge_bg = if is_online { "rgba(137, 255, 0, 0.12)" } else { "rgba(255, 51, 102, 0.15)" };
+        let badge_color = if is_online { "#89ff00" } else { "#ff3366" };
+        let badge_border = if is_online { "rgba(137, 255, 0, 0.35)" } else { "rgba(255, 51, 102, 0.4)" };
+        let badge_text = if is_online { "ONLINE // RESPONSIVE" } else { "OFFLINE // UNREACHABLE" };
+
+        let slave_os = slave.get("os").and_then(|s| s.as_str()).unwrap_or("Ubuntu 26.04 LTS");
+        let slave_uptime_secs = slave.get("uptime").and_then(|u| u.as_u64()).unwrap_or(0);
+        let slave_uptime = format_uptime(slave_uptime_secs);
+
+        let slave_cpu_pct = slave.get("cpu").and_then(|c| c.get("loadPercent")).and_then(|p| p.as_f64()).unwrap_or(0.0).round() as u64;
+        let slave_cores = slave.get("cpu").and_then(|c| c.get("cores")).and_then(|p| p.as_u64()).unwrap_or(2);
+        let slave_l1 = slave.get("cpu").and_then(|c| c.get("loadAvg")).and_then(|a| a.get(0)).and_then(|v| v.as_f64()).unwrap_or(0.0);
+        let slave_l5 = slave.get("cpu").and_then(|c| c.get("loadAvg")).and_then(|a| a.get(1)).and_then(|v| v.as_f64()).unwrap_or(0.0);
+
+        let slave_mem_pct = slave.get("memory").and_then(|m| m.get("usedPercent")).and_then(|p| p.as_f64()).unwrap_or(0.0).round() as u64;
+        let slave_used_mem = slave.get("memory").and_then(|m| m.get("usedBytes")).and_then(|b| b.as_u64()).unwrap_or(0);
+        let slave_total_mem = slave.get("memory").and_then(|m| m.get("totalBytes")).and_then(|b| b.as_u64()).unwrap_or(0);
+
+        let slave_disk_pct = slave.get("disk").and_then(|d| d.get("usedPercent")).and_then(|p| p.as_f64()).unwrap_or(0.0).round() as u64;
+        let slave_used_disk = slave.get("disk").and_then(|d| d.get("usedBytes")).and_then(|b| b.as_u64()).unwrap_or(0);
+        let slave_total_disk = slave.get("disk").and_then(|d| d.get("totalBytes")).and_then(|b| b.as_u64()).unwrap_or(0);
+
+        let s_cpu_bar = if slave_cpu_pct > 85 { "#ff3366" } else { "#89ff00" };
+        let s_mem_bar = if slave_mem_pct > 85 { "#ff3366" } else { "#89ff00" };
+        let s_disk_bar = if slave_disk_pct > 85 { "#ff3366" } else { "#89ff00" };
+
+        let mut daemons_html = String::new();
+        if let Some(services) = slave.get("services").and_then(|s| s.as_array()) {
+            for svc in services {
+                let name = svc.get("name").and_then(|n| n.as_str()).unwrap_or("");
+                let st = svc.get("status").and_then(|s| s.as_str()).unwrap_or("unknown");
+                let is_act = st == "active";
+                let c = if is_act { "#89ff00" } else { "#ff3366" };
+                daemons_html.push_str(&format!(
+                    r#"<span style="display:inline-flex; align-items:center; margin-right:8px; margin-bottom:6px; padding:4px 10px; border-radius:6px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.07); font-family:monospace; font-size:11px; color:#cbd5e1;"><span style="display:inline-block; width:6px; height:6px; border-radius:50%; background:{}; margin-right:6px;"></span>{}: <strong style="color:{}; margin-left:4px;">{}</strong></span>"#,
+                    c, name, c, st.to_uppercase()
+                ));
+            }
+        }
+
+        format!(
+            r#"<div class="card">
+                <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:14px;">
+                    <div>
+                        <div style="font-family:monospace; font-size:11px; font-weight:700; color:#89ff00; letter-spacing:0.12em; text-transform:uppercase;">NODE 02 // WORKER & COMPUTE SLAVE</div>
+                        <h3 style="color:#ffffff; font-size:17px; margin-top:2px;">container-of-souls (10.0.0.195 / 129.154.32.125)</h3>
+                        <div style="font-size:11px; font-family:monospace; color:#94a3b8; margin-top:3px;">Platform: {} &bull; Uptime: {}</div>
+                    </div>
+                    <span class="badge" style="background:{}; color:{}; border:1px solid {};">
+                        <span style="display:inline-block; width:6px; height:6px; border-radius:50%; background:{}; margin-right:6px;"></span>
+                        {}
+                    </span>
+                </div>
+
+                <table style="width:100%; margin:0 0 14px 0; border:none;">
+                    <tr>
+                        <td class="metric-col" style="width:32%;">
+                            <div class="metric-lbl">CPU Load</div>
+                            <div class="metric-val">{}%</div>
+                            <div class="metric-sub">{} Cores &bull; {:.2}, {:.2}</div>
+                            <div class="progress-bg"><div style="height:100%; width:{}%; background:{}; border-radius:2px;"></div></div>
+                        </td>
+                        <td style="width:2%;"></td>
+                        <td class="metric-col" style="width:32%;">
+                            <div class="metric-lbl">RAM Usage</div>
+                            <div class="metric-val">{}%</div>
+                            <div class="metric-sub">{} / {}</div>
+                            <div class="progress-bg"><div style="height:100%; width:{}%; background:{}; border-radius:2px;"></div></div>
+                        </td>
+                        <td style="width:2%;"></td>
+                        <td class="metric-col" style="width:32%;">
+                            <div class="metric-lbl">NVMe Disk</div>
+                            <div class="metric-val">{}%</div>
+                            <div class="metric-sub">{} / {}</div>
+                            <div class="progress-bg"><div style="height:100%; width:{}%; background:{}; border-radius:2px;"></div></div>
+                        </td>
+                    </tr>
+                </table>
+
+                <div style="border-top:1px solid rgba(255,255,255,0.06); padding-top:12px;">
+                    <div style="font-family:monospace; font-size:11px; color:#94a3b8; margin-bottom:8px; text-transform:uppercase;">Slave Native Daemons:</div>
+                    <div>{}</div>
+                </div>
+            </div>"#,
+            slave_os, slave_uptime,
+            badge_bg, badge_color, badge_border, badge_color, badge_text,
+            slave_cpu_pct, slave_cores, slave_l1, slave_l5, slave_cpu_pct, s_cpu_bar,
+            slave_mem_pct, format_bytes(slave_used_mem), format_bytes(slave_total_mem), slave_mem_pct, s_mem_bar,
+            slave_disk_pct, format_bytes(slave_used_disk), format_bytes(slave_total_disk), slave_disk_pct, s_disk_bar,
+            daemons_html
+        )
+    } else {
+        r#"<div class="card" style="border-color: rgba(255, 51, 102, 0.3);">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <div>
+                    <div style="font-family:monospace; font-size:11px; font-weight:700; color:#ff3366; letter-spacing:0.12em; text-transform:uppercase;">NODE 02 // WORKER & COMPUTE SLAVE</div>
+                    <h3 style="color:#ffffff; font-size:17px; margin-top:2px;">container-of-souls (10.0.0.195)</h3>
+                    <div style="font-size:11px; font-family:monospace; color:#94a3b8; margin-top:3px;">Slave probe offline or unreachable across private VCN tunnel</div>
+                </div>
+                <span class="badge" style="background:rgba(255,51,102,0.15); color:#ff3366; border:1px solid rgba(255,51,102,0.4);">
+                    <span style="display:inline-block; width:6px; height:6px; border-radius:50%; background:#ff3366; margin-right:6px;"></span>
+                    OFFLINE
+                </span>
+            </div>
+        </div>"#.to_string()
+    };
+
+    // Docker Rows
+    let docker_rows = data.docker.iter().map(|c| {
+        let is_healthy = c.health == "healthy" || (c.state == "running" && c.health == "none");
+        let color = if is_healthy { "#89ff00" } else { "#ff3366" };
+        format!(
+            r#"<tr style="border-bottom: 1px solid rgba(255, 255, 255, 0.06);">
+                <td style="padding: 10px 12px; font-weight: 600; color: #ffffff; font-family: monospace; font-size: 13px;">{}</td>
+                <td style="padding: 10px 12px; color: #94a3b8; font-family: monospace; font-size: 12px;">{}</td>
+                <td style="padding: 10px 12px;"><span style="display:inline-flex; align-items:center; padding: 3px 8px; border-radius: 6px; font-size: 11px; font-weight: 700; font-family: monospace; background: rgba(255,255,255,0.04); color: {}; border: 1px solid rgba(255,255,255,0.08);"><span style="display:inline-block; width:6px; height:6px; border-radius:50%; background:{}; margin-right:6px;"></span>{}</span></td>
+                <td style="padding: 10px 12px; color: #cbd5e1; font-family: monospace; font-size: 12px;">{}</td>
+            </tr>"#,
+            c.name, c.image, color, color, c.state.to_uppercase(), c.ports
+        )
+    }).collect::<Vec<_>>().join("");
+
+    // Services Probes Matrix
+    let service_pills = data.services.iter().map(|s| {
+        let is_up = s.status == "running" || s.status == "active";
+        let color = if is_up { "#89ff00" } else { "#ff3366" };
+        format!(
+            r#"<span style="display:inline-flex; align-items:center; margin-right:8px; margin-bottom:8px; padding:6px 12px; border-radius:8px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); font-family:monospace; font-size:12px; color:#f8fafc;">
+                <span style="display:inline-block; width:6px; height:6px; border-radius:50%; background:{}; margin-right:8px;"></span>
+                {} :{} &bull; <strong style="color:{}; margin-left:4px;">{}</strong>
+            </span>"#,
+            color, s.name, s.port, color, s.status.to_uppercase()
+        )
+    }).collect::<Vec<_>>().join("");
 
     format!(
         r##"<!DOCTYPE html>
@@ -673,17 +745,33 @@ h2, h3 {{ margin: 0; font-weight: 700; letter-spacing: -0.02em; }}
         </div>
     </div>
 
-    <!-- Hardware Telemetry -->
+    <!-- Cluster Diagnostics & Status Alerts -->
     <div class="card">
-        <h3 style="color: #ffffff; font-size: 16px; margin-bottom: 4px;">Hardware Telemetry Core</h3>
-        <p style="font-size: 12px; font-family: monospace; color: #94a3b8; margin: 0 0 16px 0;">Master Core & Worker Resources</p>
+        <h3 style="color: #ffffff; font-size: 16px; margin-bottom: 4px;">Anomalies & Health Audit</h3>
+        <p style="font-size: 12px; font-family: monospace; color: #94a3b8; margin: 0 0 14px 0;">Automated 24h Cluster Node Inspection</p>
+        {}
+    </div>
+
+    <!-- Node 01: Master Core -->
+    <div class="card">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:14px;">
+            <div>
+                <div style="font-family:monospace; font-size:11px; font-weight:700; color:#89ff00; letter-spacing:0.12em; text-transform:uppercase;">NODE 01 // MASTER INGRESS & CORE</div>
+                <h3 style="color:#ffffff; font-size:17px; margin-top:2px;">{} (10.0.0.86 / 68.233.115.138)</h3>
+                <div style="font-size:11px; font-family:monospace; color:#94a3b8; margin-top:3px;">Platform: {} &bull; Uptime: {}</div>
+            </div>
+            <span class="badge" style="background:rgba(137,255,0,0.12); color:#89ff00; border:1px solid rgba(137,255,0,0.35);">
+                <span style="display:inline-block; width:6px; height:6px; border-radius:50%; background:#89ff00; margin-right:6px;"></span>
+                ONLINE // MASTER
+            </span>
+        </div>
         
         <table style="width:100%; margin:0; border:none;">
             <tr>
                 <td class="metric-col" style="width:32%;">
                     <div class="metric-lbl">CPU Load</div>
                     <div class="metric-val">{}%</div>
-                    <div class="metric-sub">{} Cores Active</div>
+                    <div class="metric-sub">{} vCPUs Active</div>
                     <div class="progress-bg"><div style="height:100%; width:{}%; background:{}; border-radius:2px;"></div></div>
                 </td>
                 <td style="width:2%;"></td>
@@ -704,59 +792,52 @@ h2, h3 {{ margin: 0; font-weight: 700; letter-spacing: -0.02em; }}
         </table>
     </div>
 
-    <!-- Cluster Diagnostics & Status -->
-    <div class="card">
-        <h3 style="color: #ffffff; font-size: 16px; margin-bottom: 4px;">Anomalies & Health Audit</h3>
-        <p style="font-size: 12px; font-family: monospace; color: #94a3b8; margin: 0 0 14px 0;">Automated 24h Error Inspection</p>
-        {}
-    </div>
+    <!-- Node 02: Slave Worker (container-of-souls) -->
+    {}
 
     <!-- Docker Services -->
     <div class="card">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-            <h3 style="color: #ffffff; font-size: 16px;">Docker Orchestration ({})</h3>
-            <span style="font-family:monospace; font-size:11px; color:#89ff00;">MASTER INGRESS</span>
+            <h3 style="color: #ffffff; font-size: 16px;">Production Docker Units ({})</h3>
+            <span style="font-family:monospace; font-size:11px; color:#89ff00;">MASTER WORKLOAD</span>
         </div>
         <table>
-            <thead><tr><th>Container</th><th>Image</th><th>Status</th></tr></thead>
+            <thead><tr><th>Container</th><th>Image</th><th>Status</th><th>Network Mapping</th></tr></thead>
             <tbody>{}</tbody>
         </table>
     </div>
 
-    <!-- Cluster Daemon Units -->
+    <!-- Active Network Services Matrix -->
     <div class="card">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-            <h3 style="color: #ffffff; font-size: 16px;">Cluster Daemon Units ({})</h3>
-            <span style="font-family:monospace; font-size:11px; color:#94a3b8;">MONITORED</span>
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+            <h3 style="color: #ffffff; font-size: 16px;">Network Services & Port Probes</h3>
+            <span style="font-family:monospace; font-size:11px; color:#94a3b8;">CORE DAEMONS</span>
         </div>
-        <table>
-            <thead><tr><th>Process</th><th>Status</th><th>CPU</th><th>RAM</th><th>Uptime</th></tr></thead>
-            <tbody>{}</tbody>
-        </table>
+        <div>{}</div>
     </div>
 
     <!-- 24h Traffic & Inquiries Summary -->
     <div class="card">
         <h3 style="color: #ffffff; font-size: 16px; margin-bottom: 4px;">24h Traffic & Client Telemetry</h3>
-        <p style="font-size: 12px; font-family: monospace; color: #94a3b8; margin: 0 0 14px 0;">Audience engagement</p>
+        <p style="font-size: 12px; font-family: monospace; color: #94a3b8; margin: 0 0 14px 0;">Audience engagement and inbound leads</p>
         <table style="width:100%; margin:0; border:none;">
             <tr>
                 <td class="metric-col" style="width:32%;">
                     <div class="metric-lbl">Page Views</div>
                     <div class="metric-val" style="color:#89ff00;">{}</div>
-                    <div class="metric-sub">Recorded loads</div>
+                    <div class="metric-sub">Recorded visits</div>
                 </td>
                 <td style="width:2%;"></td>
                 <td class="metric-col" style="width:32%;">
                     <div class="metric-lbl">Unique Visitors</div>
                     <div class="metric-val">{}</div>
-                    <div class="metric-sub">Distinct clients</div>
+                    <div class="metric-sub">Distinct client IPs</div>
                 </td>
                 <td style="width:2%;"></td>
                 <td class="metric-col" style="width:32%;">
-                    <div class="metric-lbl">New Inquiries</div>
+                    <div class="metric-lbl">Client Messages</div>
                     <div class="metric-val" style="color:#89ff00;">{}</div>
-                    <div class="metric-sub">Contact submissions</div>
+                    <div class="metric-sub">Inbound contact queries</div>
                 </td>
             </tr>
         </table>
@@ -764,21 +845,22 @@ h2, h3 {{ margin: 0; font-weight: 700; letter-spacing: -0.02em; }}
 
     <!-- Footer -->
     <div style="text-align: center; color: #64748b; font-family: monospace; font-size: 11px; margin-top: 30px; letter-spacing: 0.05em;">
-        MOHAMMAD FAIZAL &bull; ATELIER CLUSTER TELEMETRY &bull; {}
+        MOHAMMAD FAIZAL &bull; ATELIER CLUSTER TELEMETRY &bull; PURE RUST AXUM
     </div>
 </div>
 </body>
 </html>"##,
         data.hostname, data.platform, data.uptime_formatted,
         status_bg, status_text_color, status_border, status_text_color, status_text,
+        issues_html,
+        data.hostname, data.platform, data.uptime_formatted,
         cpu_pct, data.cpu.cores, cpu_pct, cpu_bar_color,
         mem_pct, format_bytes(data.memory.used_bytes), format_bytes(data.memory.total_bytes), mem_pct, mem_bar_color,
         disk_pct, format_bytes(data.disk.used_bytes), format_bytes(data.disk.total_bytes), disk_pct, disk_bar_color,
-        issues_html,
+        slave_section,
         data.docker.len(), docker_rows,
-        data.pm2.len(), pm2_rows,
-        data.analytics24h.views, data.analytics24h.unique_visitors, data.analytics24h.messages_received,
-        data.collected_at
+        service_pills,
+        data.analytics24h.views, data.analytics24h.unique_visitors, data.analytics24h.messages_received
     )
 }
 

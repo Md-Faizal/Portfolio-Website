@@ -64,8 +64,9 @@ pub async fn require_admin_middleware(
     let pin_from_header = req
         .headers()
         .get("authorization")
+        .or_else(|| req.headers().get("x-admin-pin"))
         .and_then(|v| v.to_str().ok())
-        .map(|s| s.to_string());
+        .map(|s| s.trim().to_string());
 
     let pin_from_query = req.uri().query().and_then(|q| {
         q.split('&')

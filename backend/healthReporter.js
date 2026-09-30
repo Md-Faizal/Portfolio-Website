@@ -487,8 +487,8 @@ function generateReportHtml(data) {
     const isWarning = data.overallStatus === 'WARNING';
     const isHealthy = data.overallStatus === 'HEALTHY';
 
-    const statusColor = isCritical ? '#ef4444' : (isWarning ? '#f59e0b' : '#10b981');
-    const statusBg = isCritical ? 'rgba(239, 68, 68, 0.15)' : (isWarning ? 'rgba(245, 158, 11, 0.15)' : 'rgba(16, 185, 129, 0.15)');
+    const statusColor = isCritical ? '#ff3366' : (isWarning ? '#f59e0b' : '#89ff00');
+    const statusBg = isCritical ? 'rgba(255, 51, 102, 0.15)' : (isWarning ? 'rgba(245, 158, 11, 0.15)' : 'rgba(137, 255, 0, 0.15)');
     const statusText = isCritical ? 'CRITICAL ATTENTION REQUIRED' : (isWarning ? 'SYSTEM WARNINGS DETECTED' : 'ALL SYSTEMS OPERATIONAL');
 
     const formattedDate = new Date(data.collectedAt).toUTCString();
@@ -602,18 +602,19 @@ function generateReportHtml(data) {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>VM Health & 24h Performance Report</title>
 </head>
-<body style="margin: 0; padding: 0; background-color: #0b0b0c; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #e2e8f0; line-height: 1.5;">
-    <div style="max-width: 780px; margin: 0 auto; padding: 24px 16px;">
+<body style="margin: 0; padding: 0; background-color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #f8fafc; line-height: 1.5;">
+    <div style="max-width: 680px; margin: 0 auto; padding: 24px 16px;">
         
         <!-- Header -->
-        <table style="width: 100%; margin-bottom: 20px;">
+        <table style="width: 100%; margin-bottom: 20px; background: #0c0d10; border: 1px solid rgba(137, 255, 0, 0.25); border-radius: 16px; padding: 20px;">
             <tr>
                 <td>
-                    <div style="font-size: 20px; font-weight: 800; color: #d4af37; letter-spacing: -0.5px;">FAIZAL.UK <span style="font-weight: 400; color: #94a3b8; font-size: 15px;">| PRODUCTION VM HEALTH</span></div>
-                    <div style="font-size: 12px; color: #64748b; margin-top: 4px;">Host: <strong style="color: #cbd5e1;">${escapeHtml(data.hostname)}</strong> (${data.arch} / Linux ${data.release.split('-')[0]}) &bull; ${formattedDate}</div>
+                    <div style="font-family: monospace; font-size: 11px; font-weight: 700; color: #89ff00; letter-spacing: 0.18em; text-transform: uppercase; margin-bottom: 4px;">MOHAMMAD FAIZAL // ATELIER CLUSTER</div>
+                    <div style="font-size: 18px; font-weight: 800; color: #ffffff; letter-spacing: -0.5px;">24h System Health & Supervision Report</div>
+                    <div style="font-size: 11px; font-family: monospace; color: #94a3b8; margin-top: 4px;">Master: <strong style="color: #cbd5e1;">${escapeHtml(data.hostname)}</strong> (${data.arch} / Linux ${data.release.split('-')[0]}) &bull; ${formattedDate}</div>
                 </td>
-                <td style="text-align: right;">
-                    <div style="display: inline-block; background: ${statusBg}; border: 1px solid ${statusColor}; color: ${statusColor}; font-weight: 800; font-size: 12px; padding: 6px 14px; border-radius: 20px; text-transform: uppercase; letter-spacing: 0.5px;">
+                <td style="text-align: right; vertical-align: top;">
+                    <div style="display: inline-block; background: ${statusBg}; border: 1px solid ${statusColor}; color: ${statusColor}; font-family: monospace; font-weight: 800; font-size: 11px; padding: 6px 12px; border-radius: 8px; text-transform: uppercase; letter-spacing: 0.5px;">
                         ${statusText}
                     </div>
                 </td>
