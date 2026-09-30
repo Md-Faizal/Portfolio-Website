@@ -67,11 +67,12 @@ export default function PasscodeModal({ isOpen, onClose, onSuccess }) {
 
   const checkPasscode = (code) => {
     if (code.length === 4) {
-      // Passcode validation (accepts default admin passcode '2026' or '0000' or '1234')
-      if (code === '2026' || code === '0000' || code === '1234') {
+      // Passcode validation (accepts admin passcode '2004', '2026', '0000', '1234')
+      if (code === '2004' || code === '2026' || code === '0000' || code === '1234') {
+        localStorage.setItem('faizal_admin_pin', code);
         setIsSuccess(true);
         setTimeout(() => {
-          onSuccess ? onSuccess() : (window.location.href = '/admin.html');
+          onSuccess ? onSuccess() : (window.location.href = '/admin');
         }, 600);
       } else {
         setErrorShake(true);

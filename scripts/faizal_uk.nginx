@@ -1,0 +1,103 @@
+# ─── Stalwart Mail Server (Dedicated VHost) ───
+server {
+    listen 80;
+    listen [::]:80;
+    server_name mail.faizal.uk autoconfig.faizal.uk autodiscover.faizal.uk;
+    client_max_body_size 50M;
+
+    location / {
+        proxy_pass http://127.0.0.1:8080;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Forwarded-Port $server_port;
+        proxy_buffering off;
+    }
+}
+
+# ─── Personal Site & Cluster Admin Console ───
+server {
+    listen 80 default_server;
+    listen [::]:80 default_server;
+    server_name faizal.uk www.faizal.uk _;
+    root /home/ubuntu/stack/apps/personal-site/public;
+    index index.html;
+    client_max_body_size 50M;
+
+    # Static Assets & Images
+    location /assets/ {
+        alias /home/ubuntu/stack/apps/personal-site/public/assets/;
+        expires 30d;
+        add_header Cache-Control "public, max-age=2592000, immutable";
+    }
+
+    location /images/ {
+        alias /home/ubuntu/stack/apps/personal-site/public/images/;
+        autoindex off;
+    }
+
+    location /admin-assets/ {
+        alias /home/ubuntu/stack/apps/personal-site/public/admin-assets/;
+        autoindex off;
+    }
+
+    # Cluster Admin Console (SPA route)
+    location = /admin {
+        try_files /index.html =404;
+    }
+
+    location = /admin.html {
+        try_files /index.html =404;
+    }
+
+    # Personal Site Backend API
+    location /save-message {
+        proxy_pass http://127.0.0.1:3002/save-message;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+    }
+
+    location /api/ {
+        proxy_pass http://127.0.0.1:3002/api/;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+    }
+
+    # Forward webmail shortcut to mail.faizal.uk
+    location = /mail {
+        return 301 https://mail.faizal.uk/;
+    }
+
+    location /mail/ {
+        return 301 https://mail.faizal.uk/;
+    }
+
+    # Mail client auto-discovery protocols
+    location ~* ^/(jmap|\.well-known/jmap|\.well-known/autoconfig) {
+        proxy_pass http://127.0.0.1:8080;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+        client_max_body_size 50M;
+    }
+
+    # React SPA Catch-All
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+}

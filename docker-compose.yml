@@ -14,21 +14,23 @@ services:
       - ADMIN_PIN=2004
       - RUST_LOG=info
       - TZ=UTC
-      # ── SMTP via Stalwart mail container (same host localhost) ───────────
-      - SMTP_HOST=127.0.0.1
-      - SMTP_PORT=25
-      - SMTP_USER=
-      - SMTP_PASS=
-      - SMTP_TLS=none
+      # ── SMTP via Brevo Relay (port 587 STARTTLS, bypasses OCI port 25 block) ─
+      - SMTP_HOST=smtp-relay.brevo.com
+      - SMTP_PORT=587
+      - SMTP_USER=bb6408001@smtp-brevo.com
+      - SMTP_PASS=xsmtpsib-73f7e08afbd853d9e9d2e8c2049f93badd7e7f2b34e3e9de937eee1a307cace3-cmEy8jEk90T1HM6Z
+      - SMTP_TLS=starttls
       - SENDER_EMAIL=reports@faizal.uk
       - SENDER_NAME=Faizal VM Health Monitor
     volumes:
       # Persistent SQLite database — survives container restarts
-      - /home/ubuntu/faizal.uk/backend/messages.db:/app/messages.db
+      - /home/ubuntu/stack/apps/personal-site/backend/messages.db:/app/messages.db
       # Dynamic uploads (profile pics, project images)
-      - /home/ubuntu/faizal.uk/public:/app/public
+      - /home/ubuntu/stack/apps/personal-site/public:/app/public
       # Read-only Docker socket — lets health engine inspect sibling containers
       - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /home/ubuntu/stack/ops/ipc:/run/stack-service-ipc
+      - /usr/local/bin/docker-static:/usr/local/bin/docker:ro
     deploy:
       resources:
         limits:

@@ -59,6 +59,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/projects", post(routes::projects::create_project))
         .route("/projects/:id", delete(routes::projects::delete_project))
         .route("/system-stats", get(routes::health_api::get_system_stats))
+        .route("/services", get(routes::services_api::list_services))
+        .route("/services/:id/action", post(routes::services_api::control_service))
         .route("/access-logs", get(routes::security::get_access_logs))
         .route("/ban-ip", post(routes::security::ban_ip))
         .route("/banned-ips", get(routes::security::get_banned_ips))
@@ -108,6 +110,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/save-message", post(routes::contact::save_message))
         .nest("/api", api_routes)
         .nest_service("/uploads", ServeDir::new(&uploads_dir))
+        .nest_service(
+            "/admin-assets",
+            ServeDir::new(config.public_dir.join("admin-assets")),
+        )
         .route_service("/admin.html", ServeFile::new(&admin_file))
         .fallback_service(spa_service)
         .layer(from_fn_with_state(

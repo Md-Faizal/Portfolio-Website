@@ -5,3 +5,4 @@ pub mod projects;
 pub mod security;
 pub mod settings;
 pub mod visitors;
+pub mod services_api;

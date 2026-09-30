@@ -187,7 +187,7 @@ fn run_cmd(cmd: &str) -> Option<String> {
         let out = Command::new("powershell").args(["-Command", cmd]).output().ok()?;
         Some(String::from_utf8_lossy(&out.stdout).trim().to_string())
     } else {
-        let out = Command::new("bash").args(["-c", cmd]).output().ok()?;
+        let out = Command::new("sh").args(["-c", cmd]).output().ok()?;
         Some(String::from_utf8_lossy(&out.stdout).trim().to_string())
     }
 }
@@ -220,14 +220,37 @@ pub async fn collect_system_health(db: &DbPool) -> SystemHealthData {
         0
     };
 
-    let total_mem = sys.total_memory();
-    let used_mem = sys.used_memory();
-    let free_mem = sys.free_memory();
-    let mem_used_pct = if total_mem > 0 {
+    let total_mem_sys = sys.total_memory();
+    let mut total_mem = total_mem_sys;
+    let mut used_mem = sys.used_memory();
+    let mut free_mem = sys.free_memory();
+    let mut mem_used_pct = if total_mem > 0 {
         ((used_mem as f64 / total_mem as f64) * 100.0) as u64
     } else {
         0
     };
+
+    if let Ok(content) = std::fs::read_to_string("/proc/meminfo") {
+        let mut p_total: u64 = 0;
+        let mut p_free: u64 = 0;
+        let mut p_avail: u64 = 0;
+        for line in content.lines() {
+            if line.starts_with("MemTotal:") {
+                p_total = line.split_whitespace().nth(1).and_then(|s| s.parse::<u64>().ok()).unwrap_or(0) * 1024;
+            } else if line.starts_with("MemFree:") {
+                p_free = line.split_whitespace().nth(1).and_then(|s| s.parse::<u64>().ok()).unwrap_or(0) * 1024;
+            } else if line.starts_with("MemAvailable:") {
+                p_avail = line.split_whitespace().nth(1).and_then(|s| s.parse::<u64>().ok()).unwrap_or(0) * 1024;
+            }
+        }
+        if p_total > 0 {
+            let eff_free = if p_avail > 0 { p_avail } else { p_free };
+            total_mem = p_total;
+            free_mem = eff_free;
+            used_mem = p_total.saturating_sub(eff_free);
+            mem_used_pct = ((used_mem as f64 / p_total as f64) * 100.0).round() as u64;
+        }
+    }
 
     let total_swap = sys.total_swap();
     let used_swap = sys.used_swap();
@@ -306,7 +329,17 @@ pub async fn collect_system_health(db: &DbPool) -> SystemHealthData {
     // Docker Inspection
     let mut docker_list = Vec::new();
     let mut docker_summary = DockerSummary { total: 0, running: 0, healthy: 0, unhealthy: 0, stopped: 0 };
-    if let Some(stdout) = run_cmd("docker ps -a --format '{{json .}}'") {
+    let docker_stdout = if cfg!(target_os = "windows") {
+        run_cmd("docker ps -a --format \"{{json .}}\"")
+    } else {
+        Command::new("docker")
+            .args(["ps", "-a", "--format", "{{json .}}"])
+            .output()
+            .ok()
+            .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+    };
+
+    if let Some(stdout) = docker_stdout {
         for line in stdout.lines() {
             if let Ok(c) = serde_json::from_str::<serde_json::Value>(line) {
                 let name = c["Names"].as_str().unwrap_or("").to_string();
@@ -351,28 +384,39 @@ pub async fn collect_system_health(db: &DbPool) -> SystemHealthData {
         }
     }
 
-    // Service probes
-    let ports = [
-        ("Nginx Web (HTTP)", 80),
-        ("Personal Site (Rust)", 3002),
-        ("Stalwart Mail Admin/API", 8080),
-        ("Stalwart SMTPS (465)", 465),
-        ("Stalwart Submission (587)", 587),
-        ("Stalwart IMAPS (993)", 993),
-        ("MacOS Server (Blue)", 3001),
-        ("CS Panel Web", 3005),
-        ("Nexus Backend", 3010),
+    // Service probes — probe all known ports via TCP
+    // Only "core" services raise health_issues when unreachable
+    struct ProbeTarget {
+        name: &'static str,
+        port: u16,
+        is_core: bool,       // triggers health alert if offline
+        is_on_demand: bool,  // game engines / optional services
+    }
+    let probes = [
+        ProbeTarget { name: "Nginx Web (HTTP)",          port: 80,   is_core: true,  is_on_demand: false },
+        ProbeTarget { name: "Personal Site (Rust)",      port: 3002, is_core: true,  is_on_demand: false },
+        ProbeTarget { name: "MacOS Server (Blue)",       port: 3001, is_core: false, is_on_demand: false },
+        ProbeTarget { name: "Stalwart Mail Admin/API",   port: 8080, is_core: false, is_on_demand: false },
+        // Stalwart TLS mail ports — may be inactive by config; not core alerts
+        ProbeTarget { name: "Stalwart SMTPS (465)",      port: 465,  is_core: false, is_on_demand: false },
+        ProbeTarget { name: "Stalwart Submission (587)", port: 587,  is_core: false, is_on_demand: false },
+        ProbeTarget { name: "Stalwart IMAPS (993)",      port: 993,  is_core: false, is_on_demand: false },
+        // On-demand game engines
+        ProbeTarget { name: "CS Panel Web",              port: 3005, is_core: false, is_on_demand: true  },
+        ProbeTarget { name: "Minecraft Manager",         port: 5000, is_core: false, is_on_demand: true  },
+        // App backend remains startable during the gradual Rust migration
+        ProbeTarget { name: "Nexus Backend",             port: 3010, is_core: false, is_on_demand: true  },
     ];
 
     let mut services = Vec::new();
-    for (name, port) in ports {
-        let is_open = check_tcp_port(port).await;
-        if !is_open && (name.contains("Nginx") || name.contains("Personal Site") || name.contains("Stalwart Submission")) {
-            health_issues.push(format!("Core service '{}' on port {} is unreachable", name, port));
+    for p in &probes {
+        let is_open = check_tcp_port(p.port).await;
+        if !is_open && p.is_core {
+            health_issues.push(format!("CRITICAL: Core service '{}' on port {} is unreachable!", p.name, p.port));
         }
         services.push(ServiceProbe {
-            name: name.into(),
-            port,
+            name: p.name.into(),
+            port: p.port,
             status: if is_open { "ONLINE".into() } else { "OFFLINE".into() },
             badge_class: if is_open { "status-online".into() } else { "status-fail".into() },
         });
@@ -529,133 +573,211 @@ pub async fn collect_system_health(db: &DbPool) -> SystemHealthData {
 }
 
 pub fn generate_report_html(data: &SystemHealthData) -> String {
-    let (status_color, status_text) = match data.overall_status.as_str() {
-        "CRITICAL" => ("#ef4444", "CRITICAL ATTENTION REQUIRED"),
-        "WARNING" => ("#f59e0b", "SYSTEM WARNINGS DETECTED"),
-        _ => ("#10b981", "ALL SYSTEMS OPERATIONAL"),
+    let (status_bg, status_text_color, status_border, status_text) = match data.overall_status.as_str() {
+        "CRITICAL" => ("rgba(255, 51, 102, 0.15)", "#ff3366", "rgba(255, 51, 102, 0.4)", "CRITICAL ATTENTION REQUIRED"),
+        "WARNING" => ("rgba(251, 191, 36, 0.15)", "#fbbf24", "rgba(251, 191, 36, 0.4)", "SYSTEM WARNINGS DETECTED"),
+        _ => ("rgba(137, 255, 0, 0.12)", "#89ff00", "rgba(137, 255, 0, 0.35)", "ALL SYSTEMS OPERATIONAL"),
     };
 
     let issues_html = if data.health_issues.is_empty() {
-        "<p style=\"color: #10b981; margin: 0;\">✓ Zero active critical health anomalies detected.</p>".to_string()
+        r#"<div style="background: rgba(137, 255, 0, 0.06); border: 1px solid rgba(137, 255, 0, 0.2); border-radius: 8px; padding: 12px 16px; color: #89ff00; font-size: 13px; font-family: monospace;">
+            ✓ Zero critical health anomalies detected across cluster nodes in the past 24 hours.
+        </div>"#.to_string()
     } else {
-        data.health_issues
+        let items = data.health_issues
             .iter()
-            .map(|i| format!("<li style=\"color: #f59e0b; margin-bottom: 4px;\">⚠️ {}</li>", i))
+            .map(|i| format!(r#"<li style="color: #ff3366; margin-bottom: 6px; font-family: monospace; font-size: 13px;">⚠ {}</li>"#, i))
             .collect::<Vec<_>>()
-            .join("")
+            .join("");
+        format!(r#"<div style="background: rgba(255, 51, 102, 0.08); border-left: 3px solid #ff3366; border-radius: 8px; padding: 14px 16px;"><ul style="margin: 0; padding-left: 20px;">{}</ul></div>"#, items)
     };
 
     let pm2_rows = data.pm2.iter().map(|p| {
         let is_online = p.status == "online";
-        let color = if is_online { "#10b981" } else { "#ef4444" };
+        let color = if is_online { "#89ff00" } else { "#ff3366" };
+        let dot_color = if is_online { "#89ff00" } else { "#ff3366" };
         format!(
-            r#"<tr style="border-bottom: 1px solid rgba(255,255,255,0.06);">
-                <td style="padding: 10px 12px; font-weight: 600; color: #ffffff;">{}</td>
-                <td style="padding: 10px 12px;"><span style="display:inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; color: {};">{}</span></td>
-                <td style="padding: 10px 12px; color: #cbd5e1;">{}%</td>
-                <td style="padding: 10px 12px; color: #cbd5e1;">{}</td>
-                <td style="padding: 10px 12px; color: #94a3b8; font-size: 12px;">{}</td>
+            r#"<tr style="border-bottom: 1px solid rgba(255, 255, 255, 0.06);">
+                <td style="padding: 10px 12px; font-weight: 600; color: #ffffff; font-family: monospace; font-size: 13px;">{}</td>
+                <td style="padding: 10px 12px;"><span style="display:inline-flex; align-items:center; padding: 3px 8px; border-radius: 6px; font-size: 11px; font-weight: 700; font-family: monospace; background: rgba(255,255,255,0.04); color: {}; border: 1px solid rgba(255,255,255,0.08);"><span style="display:inline-block; width:6px; height:6px; border-radius:50%; background:{}; margin-right:6px;"></span>{}</span></td>
+                <td style="padding: 10px 12px; color: #cbd5e1; font-family: monospace; font-size: 13px;">{}%</td>
+                <td style="padding: 10px 12px; color: #cbd5e1; font-family: monospace; font-size: 13px;">{}</td>
+                <td style="padding: 10px 12px; color: #94a3b8; font-family: monospace; font-size: 12px;">{}</td>
             </tr>"#,
-            p.name, color, p.status.to_uppercase(), p.cpu, p.memory_formatted, p.uptime_formatted
+            p.name, color, dot_color, p.status.to_uppercase(), p.cpu, p.memory_formatted, p.uptime_formatted
         )
     }).collect::<Vec<_>>().join("");
 
     let docker_rows = data.docker.iter().map(|c| {
         let is_healthy = c.health == "healthy" || (c.state == "running" && c.health == "none");
-        let color = if is_healthy { "#10b981" } else { "#ef4444" };
+        let color = if is_healthy { "#89ff00" } else { "#ff3366" };
         format!(
-            r#"<tr style="border-bottom: 1px solid rgba(255,255,255,0.06);">
-                <td style="padding: 10px 12px; font-weight: 600; color: #ffffff;">{}</td>
-                <td style="padding: 10px 12px; color: #94a3b8; font-size: 12px;">{}</td>
-                <td style="padding: 10px 12px;"><span style="display:inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; color: {};">{}</span></td>
+            r#"<tr style="border-bottom: 1px solid rgba(255, 255, 255, 0.06);">
+                <td style="padding: 10px 12px; font-weight: 600; color: #ffffff; font-family: monospace; font-size: 13px;">{}</td>
+                <td style="padding: 10px 12px; color: #94a3b8; font-family: monospace; font-size: 12px;">{}</td>
+                <td style="padding: 10px 12px;"><span style="display:inline-flex; align-items:center; padding: 3px 8px; border-radius: 6px; font-size: 11px; font-weight: 700; font-family: monospace; background: rgba(255,255,255,0.04); color: {}; border: 1px solid rgba(255,255,255,0.08);"><span style="display:inline-block; width:6px; height:6px; border-radius:50%; background:{}; margin-right:6px;"></span>{}</span></td>
             </tr>"#,
-            c.name, c.image, color, c.state.to_uppercase()
+            c.name, c.image, color, color, c.state.to_uppercase()
         )
     }).collect::<Vec<_>>().join("");
 
+    let cpu_pct = data.cpu.load_percent.min(100);
+    let mem_pct = data.memory.used_percent.min(100);
+    let disk_pct = data.disk.used_percent.min(100);
+
+    let cpu_bar_color = if cpu_pct > 85 { "#ff3366" } else { "#89ff00" };
+    let mem_bar_color = if mem_pct > 85 { "#ff3366" } else { "#89ff00" };
+    let disk_bar_color = if disk_pct > 85 { "#ff3366" } else { "#89ff00" };
+
     format!(
         r##"<!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Atelier Cluster 24h Supervision Report</title>
 <style>
-body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0b0b0d; color: #e2e8f0; margin: 0; padding: 20px; }}
-.card {{ background: #16161a; border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 20px; margin-bottom: 20px; }}
-.header {{ border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 15px; margin-bottom: 20px; }}
-.badge {{ display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: bold; }}
-.metric {{ display: inline-block; width: 30%; min-width: 150px; margin-bottom: 15px; }}
-.metric-val {{ font-size: 22px; font-weight: bold; color: #ffffff; }}
-.metric-lbl {{ font-size: 12px; color: #94a3b8; }}
-table {{ width: 100%; border-collapse: collapse; }}
-th {{ text-align: left; padding: 8px 12px; color: #94a3b8; font-size: 12px; border-bottom: 1px solid rgba(255,255,255,0.1); }}
+body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #000000; color: #f8fafc; margin: 0; padding: 30px 15px; -webkit-font-smoothing: antialiased; }}
+.container {{ max-width: 680px; margin: 0 auto; }}
+.card {{ background: #0c0d10; border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 16px; padding: 24px; margin-bottom: 20px; }}
+.header-card {{ background: #0c0d10; border: 1px solid rgba(137, 255, 0, 0.25); border-radius: 16px; padding: 28px 24px; margin-bottom: 20px; }}
+.badge {{ display: inline-flex; align-items: center; padding: 6px 14px; border-radius: 8px; font-size: 11px; font-weight: 700; font-family: monospace; letter-spacing: 0.1em; text-transform: uppercase; }}
+.metric-col {{ background: #070709; border: 1px solid rgba(255, 255, 255, 0.06); border-radius: 12px; padding: 14px; vertical-align: top; }}
+.metric-val {{ font-size: 26px; font-weight: 800; font-family: monospace; color: #ffffff; margin: 4px 0; }}
+.metric-lbl {{ font-size: 11px; font-family: monospace; text-transform: uppercase; color: #94a3b8; letter-spacing: 0.08em; }}
+.metric-sub {{ font-size: 11px; font-family: monospace; color: #64748b; }}
+.progress-bg {{ width: 100%; height: 4px; background: rgba(255, 255, 255, 0.08); border-radius: 2px; margin-top: 10px; overflow: hidden; }}
+table {{ width: 100%; border-collapse: collapse; margin-top: 12px; }}
+th {{ text-align: left; padding: 8px 12px; color: #94a3b8; font-family: monospace; font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; border-bottom: 1px solid rgba(255, 255, 255, 0.08); }}
+h2, h3 {{ margin: 0; font-weight: 700; letter-spacing: -0.02em; }}
 </style>
 </head>
 <body>
-<div style="max-width: 720px; margin: 0 auto;">
-    <div class="card header">
-        <h2 style="color: #d4af37; margin: 0 0 8px 0;">VM 24h Executive Health Report</h2>
-        <div style="font-size: 13px; color: #94a3b8;">Host: {} &bull; {} &bull; Uptime: {}</div>
-        <div style="margin-top: 12px;">
-            <span class="badge" style="background: {}; color: #000;">{}</span>
+<div class="container">
+    <!-- Brand & Executive Header -->
+    <div class="header-card">
+        <div style="font-family: monospace; font-size: 11px; font-weight: 700; color: #89ff00; letter-spacing: 0.18em; text-transform: uppercase; margin-bottom: 6px;">
+            MOHAMMAD FAIZAL // ATELIER CLUSTER
+        </div>
+        <h2 style="color: #ffffff; font-size: 22px; font-weight: 700; margin-bottom: 8px;">
+            24h System Health & Supervision Report
+        </h2>
+        <div style="font-size: 12px; font-family: monospace; color: #94a3b8; line-height: 1.5;">
+            Master: {} (10.0.0.86) &bull; Platform: {} &bull; Uptime: {}
+        </div>
+        <div style="margin-top: 16px;">
+            <span class="badge" style="background: {}; color: {}; border: 1px solid {};">
+                <span style="display:inline-block; width:6px; height:6px; border-radius:50%; background:{}; margin-right:8px;"></span>
+                {}
+            </span>
         </div>
     </div>
 
+    <!-- Hardware Telemetry -->
     <div class="card">
-        <h3 style="color: #d4af37; margin-top: 0;">System Performance Core</h3>
-        <div class="metric">
-            <div class="metric-lbl">CPU Load (1m)</div>
-            <div class="metric-val">{}%</div>
-            <div class="metric-lbl">{} cores</div>
-        </div>
-        <div class="metric">
-            <div class="metric-lbl">RAM Usage</div>
-            <div class="metric-val">{}%</div>
-            <div class="metric-lbl">{} / {}</div>
-        </div>
-        <div class="metric">
-            <div class="metric-lbl">Disk Usage (/)</div>
-            <div class="metric-val">{}%</div>
-            <div class="metric-lbl">{} / {}</div>
-        </div>
-    </div>
-
-    <div class="card">
-        <h3 style="color: #d4af37; margin-top: 0;">Anomalies & Status</h3>
-        <ul style="padding-left: 20px; margin: 0;">
-            {}
-        </ul>
-    </div>
-
-    <div class="card">
-        <h3 style="color: #d4af37; margin-top: 0;">PM2 Applications ({})</h3>
-        <table>
-            <thead><tr><th>Process</th><th>Status</th><th>CPU</th><th>RAM</th><th>Uptime</th></tr></thead>
-            <tbody>{}</tbody>
+        <h3 style="color: #ffffff; font-size: 16px; margin-bottom: 4px;">Hardware Telemetry Core</h3>
+        <p style="font-size: 12px; font-family: monospace; color: #94a3b8; margin: 0 0 16px 0;">Master Core & Worker Resources</p>
+        
+        <table style="width:100%; margin:0; border:none;">
+            <tr>
+                <td class="metric-col" style="width:32%;">
+                    <div class="metric-lbl">CPU Load</div>
+                    <div class="metric-val">{}%</div>
+                    <div class="metric-sub">{} Cores Active</div>
+                    <div class="progress-bg"><div style="height:100%; width:{}%; background:{}; border-radius:2px;"></div></div>
+                </td>
+                <td style="width:2%;"></td>
+                <td class="metric-col" style="width:32%;">
+                    <div class="metric-lbl">RAM Usage</div>
+                    <div class="metric-val">{}%</div>
+                    <div class="metric-sub">{} / {}</div>
+                    <div class="progress-bg"><div style="height:100%; width:{}%; background:{}; border-radius:2px;"></div></div>
+                </td>
+                <td style="width:2%;"></td>
+                <td class="metric-col" style="width:32%;">
+                    <div class="metric-lbl">NVMe Disk (/)</div>
+                    <div class="metric-val">{}%</div>
+                    <div class="metric-sub">{} / {}</div>
+                    <div class="progress-bg"><div style="height:100%; width:{}%; background:{}; border-radius:2px;"></div></div>
+                </td>
+            </tr>
         </table>
     </div>
 
+    <!-- Cluster Diagnostics & Status -->
     <div class="card">
-        <h3 style="color: #d4af37; margin-top: 0;">Docker Services ({})</h3>
+        <h3 style="color: #ffffff; font-size: 16px; margin-bottom: 4px;">Anomalies & Health Audit</h3>
+        <p style="font-size: 12px; font-family: monospace; color: #94a3b8; margin: 0 0 14px 0;">Automated 24h Error Inspection</p>
+        {}
+    </div>
+
+    <!-- Docker Services -->
+    <div class="card">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+            <h3 style="color: #ffffff; font-size: 16px;">Docker Orchestration ({})</h3>
+            <span style="font-family:monospace; font-size:11px; color:#89ff00;">MASTER INGRESS</span>
+        </div>
         <table>
             <thead><tr><th>Container</th><th>Image</th><th>Status</th></tr></thead>
             <tbody>{}</tbody>
         </table>
     </div>
 
-    <div style="text-align: center; color: #64748b; font-size: 12px; margin-top: 20px;">
-        Generated natively by Faizal Rust Axum Daemon &bull; {}
+    <!-- Cluster Daemon Units -->
+    <div class="card">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+            <h3 style="color: #ffffff; font-size: 16px;">Cluster Daemon Units ({})</h3>
+            <span style="font-family:monospace; font-size:11px; color:#94a3b8;">MONITORED</span>
+        </div>
+        <table>
+            <thead><tr><th>Process</th><th>Status</th><th>CPU</th><th>RAM</th><th>Uptime</th></tr></thead>
+            <tbody>{}</tbody>
+        </table>
+    </div>
+
+    <!-- 24h Traffic & Inquiries Summary -->
+    <div class="card">
+        <h3 style="color: #ffffff; font-size: 16px; margin-bottom: 4px;">24h Traffic & Client Telemetry</h3>
+        <p style="font-size: 12px; font-family: monospace; color: #94a3b8; margin: 0 0 14px 0;">Audience engagement</p>
+        <table style="width:100%; margin:0; border:none;">
+            <tr>
+                <td class="metric-col" style="width:32%;">
+                    <div class="metric-lbl">Page Views</div>
+                    <div class="metric-val" style="color:#89ff00;">{}</div>
+                    <div class="metric-sub">Recorded loads</div>
+                </td>
+                <td style="width:2%;"></td>
+                <td class="metric-col" style="width:32%;">
+                    <div class="metric-lbl">Unique Visitors</div>
+                    <div class="metric-val">{}</div>
+                    <div class="metric-sub">Distinct clients</div>
+                </td>
+                <td style="width:2%;"></td>
+                <td class="metric-col" style="width:32%;">
+                    <div class="metric-lbl">New Inquiries</div>
+                    <div class="metric-val" style="color:#89ff00;">{}</div>
+                    <div class="metric-sub">Contact submissions</div>
+                </td>
+            </tr>
+        </table>
+    </div>
+
+    <!-- Footer -->
+    <div style="text-align: center; color: #64748b; font-family: monospace; font-size: 11px; margin-top: 30px; letter-spacing: 0.05em;">
+        MOHAMMAD FAIZAL &bull; ATELIER CLUSTER TELEMETRY &bull; {}
     </div>
 </div>
 </body>
 </html>"##,
         data.hostname, data.platform, data.uptime_formatted,
-        status_color, status_text,
-        data.cpu.load_percent, data.cpu.cores,
-        data.memory.used_percent, format_bytes(data.memory.used_bytes), format_bytes(data.memory.total_bytes),
-        data.disk.used_percent, format_bytes(data.disk.used_bytes), format_bytes(data.disk.total_bytes),
+        status_bg, status_text_color, status_border, status_text_color, status_text,
+        cpu_pct, data.cpu.cores, cpu_pct, cpu_bar_color,
+        mem_pct, format_bytes(data.memory.used_bytes), format_bytes(data.memory.total_bytes), mem_pct, mem_bar_color,
+        disk_pct, format_bytes(data.disk.used_bytes), format_bytes(data.disk.total_bytes), disk_pct, disk_bar_color,
         issues_html,
-        data.pm2.len(), pm2_rows,
         data.docker.len(), docker_rows,
+        data.pm2.len(), pm2_rows,
+        data.analytics24h.views, data.analytics24h.unique_visitors, data.analytics24h.messages_received,
         data.collected_at
     )
 }

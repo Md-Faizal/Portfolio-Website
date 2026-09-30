@@ -129,7 +129,7 @@ pub async fn send_contact_notification(
         name, sender_email, subject, content, ip
     );
 
-    let email = match Message::builder()
+    let mut builder = match Message::builder()
         .from(match from_header.parse() {
             Ok(f) => f,
             Err(_) => return,
@@ -138,14 +138,28 @@ pub async fn send_contact_notification(
             Ok(r) => r,
             Err(_) => return,
         })
-        .to(match destination.parse() {
-            Ok(t) => t,
-            Err(_) => return,
-        })
         .subject(email_subject)
-        .header(ContentType::TEXT_PLAIN)
-        .body(body)
-    {
+        .header(ContentType::TEXT_PLAIN) {
+            builder => builder,
+        };
+
+    let mut has_recipient = false;
+    for token in destination.split(|c| c == ',' || c == ';' || c == ' ') {
+        let t = token.trim();
+        if t.contains('@') {
+            if let Ok(addr) = t.parse::<lettre::Address>() {
+                builder = builder.to(addr.into());
+                has_recipient = true;
+            }
+        }
+    }
+
+    if !has_recipient {
+        error!("No valid destination address found in: {}", destination);
+        return;
+    }
+
+    let email = match builder.body(body) {
         Ok(m) => m,
         Err(e) => {
             error!("Failed to build email message: {}", e);
@@ -167,22 +181,36 @@ pub async fn send_report_email(
     html_body: String,
 ) -> Result<(), String> {
     let (transport, default_dest) = build_transport(config, db).await?;
-    let to_addr = if !recipient.trim().is_empty() {
+    let raw_recipients = if !recipient.trim().is_empty() {
         recipient.trim()
     } else {
         &default_dest
     };
 
     let from_header = format!("\"{}\" <{}>", config.sender_name, config.sender_email);
-    let email = Message::builder()
+    let mut builder = Message::builder()
         .from(from_header.parse().map_err(|e: lettre::address::AddressError| e.to_string())?)
-        .to(to_addr.parse().map_err(|e: lettre::address::AddressError| e.to_string())?)
         .subject(subject)
-        .header(ContentType::TEXT_HTML)
-        .body(html_body)
-        .map_err(|e| e.to_string())?;
+        .header(ContentType::TEXT_HTML);
+
+    let mut has_recipient = false;
+    for token in raw_recipients.split(|c| c == ',' || c == ';' || c == ' ') {
+        let t = token.trim();
+        if t.contains('@') {
+            if let Ok(addr) = t.parse::<lettre::Address>() {
+                builder = builder.to(addr.into());
+                has_recipient = true;
+            }
+        }
+    }
+
+    if !has_recipient {
+        return Err(format!("No valid recipient addresses in '{}'", raw_recipients));
+    }
+
+    let email = builder.body(html_body).map_err(|e| e.to_string())?;
 
     transport.send(email).await.map_err(|e| e.to_string())?;
-    info!("Health report sent to {}", to_addr);
+    info!("Health report successfully sent to {}", raw_recipients);
     Ok(())
 }

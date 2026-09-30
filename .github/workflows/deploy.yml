@@ -2,7 +2,7 @@ name: Deploy Personal Site (Rust + React)
 
 on:
   push:
-    branches: [ master ]
+    branches: [ master, main ]
   workflow_dispatch:
     inputs:
       dry_run:
@@ -25,15 +25,8 @@ jobs:
       - name: 📥 Checkout Source Code
         uses: actions/checkout@v4
 
-      - name: 🦀 Setup Rust & Musl
+      - name: 🦀 Setup Rust Toolchain
         uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: x86_64-unknown-linux-musl
-
-      - name: 📦 Install Build Dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y musl-tools
 
       - name: 🟢 Setup Node.js
         uses: actions/setup-node@v4
@@ -42,20 +35,28 @@ jobs:
           cache: 'npm'
           cache-dependency-path: 'frontend/package-lock.json'
 
-      - name: 🌐 Build React Frontend
+      - name: 🌐 Build React Frontend & Standalone Admin
         run: |
           cd frontend
           npm ci
+          # Build Main SPA
           npm run build
+          # Build Standalone Admin Console
+          npx vite build -c vite.admin.config.js
+          # Synchronize dist-admin into public and dist
+          cp dist-admin/admin.html ../public/admin.html
+          cp -r dist-admin/assets/* ../public/assets/
+          cp dist-admin/admin.html dist/admin.html
+          cp -r dist-admin/assets/* dist/assets/
           cd ..
 
-      - name: ⚡ Build Rust Axum Backend (Musl Static Binary)
+      - name: ⚡ Build Rust Axum Backend (Optimized Release Binary)
         run: |
           cd backend-rust
-          cargo build --release --target x86_64-unknown-linux-musl
-          strip target/x86_64-unknown-linux-musl/release/personal-site-rust
+          cargo build --release
+          strip target/release/personal-site-rust
           cd ..
-          cp backend-rust/target/x86_64-unknown-linux-musl/release/personal-site-rust ./personal-site-rust
+          cp backend-rust/target/release/personal-site-rust ./personal-site-rust
           chmod +x ./personal-site-rust
           ls -lh ./personal-site-rust
 
@@ -84,7 +85,7 @@ jobs:
           SSH_USER: ${{ secrets.SSH_USER }}
           SSH_KEY: ${{ secrets.SSH_KEY }}
 
-      - name: 🔌 Setup SSH & Deploy to VM
+      - name: 🔌 Setup SSH & Deploy to Production VM
         if: github.event.inputs.dry_run != 'true'
         env:
           SSH_HOST: ${{ secrets.SSH_HOST }}
@@ -116,12 +117,9 @@ jobs:
           EOF
           chmod 600 ~/.ssh/config
 
-          TARGET_DIR="/home/ubuntu/faizal.uk"
+          TARGET_DIR="/home/ubuntu/stack/apps/personal-site"
 
           echo "🚀 Syncing built binary, frontend dist, and configs to $TARGET_DIR..."
-
-          # Stop old PM2 node process if running to free port 3002 and RAM
-          ssh production "pm2 stop personal-site 2>/dev/null && pm2 delete personal-site 2>/dev/null && pm2 save || true"
 
           # Upload static stripped binary and docker configs
           scp ./personal-site-rust production:$TARGET_DIR/personal-site-rust
@@ -131,12 +129,15 @@ jobs:
           rsync -avz --delete frontend/dist/ production:$TARGET_DIR/frontend/dist/
           rsync -avz public/ production:$TARGET_DIR/public/
 
-          echo "🐳 Launching optimized Docker container..."
+          echo "🐳 Rebuilding and launching production Docker container..."
           ssh production bash -s << 'REMOTESCRIPT'
           set -e
-          cd /home/ubuntu/faizal.uk
+          cd /home/ubuntu/stack/apps/personal-site
 
-          # Build and start container (pre-compiled binary copies into alpine:3.20 in seconds)
+          # Ensure the slave probe SSH tunnel is active
+          systemctl is-active --quiet cos-tunnel.service || sudo systemctl restart cos-tunnel.service || true
+
+          # Build and start container
           docker compose up -d --build --remove-orphans
 
           # Verify container health

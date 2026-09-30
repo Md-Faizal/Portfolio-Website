@@ -1,15 +1,19 @@
 # =============================================================================
-# Minimal Rust Production Dockerfile — Pre-compiled Static Musl Binary
-# Image Size: ~15 MB | Runtime RSS: ~5–12 MB
+# Rust Production Dockerfile — Ubuntu 24.04 runtime (GLIBC_2.39 compatible)
+# Binary: dynamically-linked x86-64 Linux compiled on Ubuntu 24.04 (Rust 1.98)
+# Image Size: ~140 MB | Runtime RSS: ~8–15 MB
 # =============================================================================
-FROM alpine:3.20 AS runtime
+FROM ubuntu:24.04 AS runtime
 
-RUN apk add --no-cache ca-certificates tzdata
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates tzdata curl wget \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# Copy pre-compiled static Linux musl binary
+# Copy pre-compiled glibc Linux binary (compiled on Ubuntu 24.04 / Rust 1.98)
 COPY personal-site-rust /app/personal-site-rust
+RUN chmod +x /app/personal-site-rust
 
 # Copy static frontend build & public assets
 COPY frontend/dist /app/frontend/dist
@@ -21,7 +25,7 @@ ENV PORT=3002 \
 
 EXPOSE 3002
 
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD wget -qO- http://127.0.0.1:3002/api/maintenance-status || exit 1
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+    CMD curl -sf http://127.0.0.1:3002/api/maintenance-status || exit 1
 
 ENTRYPOINT ["/app/personal-site-rust"]

@@ -27,17 +27,28 @@
    - Purged ~14 GB of stale VS Code server revisions (`~/.vscode-server/cli/servers`).
    - Purged ~12 GB of unneeded desktop GUI snaps (`firefox`, `thunderbird`, `chromium`, `cups`, `gnome-46`, `mesa-2404`).
    - Cleaned build and download caches (`~/.cache`, `/var/lib/snapd/cache`).
-   - **Result**: Free space jumped from **1.4 GB (3%) to 13–20 GB (>30-40% free)**.
+   - **Result**: Free space jumped from **1.4 GB (3%) to 18–20 GB (37% free)**.
 2. **Personal Site (`faizal.uk`) Migrated to Rust**:
    - Replaced PM2 Node.js process with a standalone compiled Rust Axum binary (`personal-site-rust` container).
    - Memory dropped from **~50 MB &rarr; 4.58 MB RAM**.
    - Connected directly to Stalwart ESMTP on `127.0.0.1:25`.
 3. **Backup & Restore System Operational**:
-   - [`/opt/stack/ops/scripts/backup.sh`](file:///opt/stack/ops/scripts/backup.sh): Takes transactional `VACUUM INTO` snapshots of live SQLite databases (`nexus_portal.db`, `panel.db`, `MacOS.db`), backs up Nginx configs and compose manifests into an **11 MB `.tar.gz` bundle** in `/opt/backups/`.
+   - [`/opt/stack/ops/scripts/backup.sh`](file:///opt/stack/ops/scripts/backup.sh): Takes transactional `VACUUM INTO` snapshots of live SQLite databases (`nexus_portal.db`, `panel.db`, `MacOS.db`, `messages.db`), backs up Nginx configs and compose manifests into an **13 MB `.tar.gz` bundle** in `/opt/backups/`.
    - [`/opt/stack/ops/scripts/restore.sh`](file:///opt/stack/ops/scripts/restore.sh): 1-command restore script with safety rollbacks.
+   - Nightly backup automated via crontab (`0 3 * * * /opt/stack/ops/scripts/backup.sh >> /var/log/stack_backup.log 2>&1`).
 4. **MacOS Desktop Service Emergency Restoration**:
    - Restored displaced files back to `/home/ubuntu/MacOS-Production/`.
    - `macos-server-blue` container verified online and healthy on `https://mac.faizal.uk` (port 3001).
+5. **Unified Master Layout at `/home/ubuntu/stack/`**:
+   - Physically consolidated all apps, games, compose definitions, and operations scripts into one single master directory: `/home/ubuntu/stack/`.
+   - Eliminated confusing symlink bridges and purged `/opt/stack`.
+   - Full IDE and SSH write permissions without `sudo` friction.
+6. **PM2 Daemon Completely Retired**:
+   - Migrated `cs-panel` to native systemd unit (`cs-panel.service`).
+   - Migrated `mc-manager` to native systemd unit (`mc-manager.service`).
+   - `nexus-backend` is stopped but remains manually startable from `/home/ubuntu/stack/apps/nexus/` for continued use during the gradual Rust migration.
+   - Executed `pm2 kill` and disabled `pm2-ubuntu`.
+   - **Reclaimed ~55 MB+ RAM** previously consumed by PM2 master god daemon, agent, and logrotate.
 
 ---
 
@@ -46,53 +57,48 @@
 All active production services are verified healthy:
 - **`https://mac.faizal.uk`** &rarr; `macos-server-blue` Docker container (port 3001, HTTP 200 OK)
 - **`https://faizal.uk`** &rarr; `personal-site-rust` Docker container (port 3002, HTTP 200 OK)
-- **`https://nexus.faizal.uk`** &rarr; `nexus-backend` in PM2 (port 3010, HTTP 200 OK)
-- **`http://cs.faizal.uk`** &rarr; `cs-panel-web` in PM2 (port 3005, HTTP 200 OK)
+- **`nexus.faizal.uk`** &rarr; **Stopped, available to start** (`nexus-backend.service` runs the Node.js app in `/home/ubuntu/stack/apps/nexus`)
+- **`http://cs.faizal.uk`** &rarr; `cs-panel.service` under systemd (port 3005, HTTP 200 OK)
+- **`https://mine.faizal.uk`** &rarr; `mc-manager.service` under systemd (port 5000, HTTP 200 OK)
 - **Mail Server** &rarr; `stalwartlabs/stalwart:latest` Docker container (ports 25, 8080, healthy)
 
 ---
 
-## 4. Immediate Next Steps for the Next Agent
-
-### Step 1: Complete the `/opt/stack` Layout with Symlinks
-Ensure existing host paths never break by creating the standard layout in `/opt/stack` and symlinking `/home/ubuntu/*` to `/opt/stack/*`:
+## 4. Current Master Layout (`/home/ubuntu/stack`)
 
 ```
-/opt/stack/
-├── compose.env
-├── docker-compose.yml               # Central orchestrator using Compose 'include:'
+/home/ubuntu/stack/
+├── docker-compose.yml               # Central compose orchestrator
 ├── apps/
-│   ├── personal-site/               # docker-compose.yml (Live)
-│   ├── nexus/                       # docker-compose.yml, data/ (nexus_portal.db)
-│   ├── macos-desktop/               # docker-compose.yml -> /home/ubuntu/MacOS-Production
-│   ├── cs-panel/                    # docker-compose.yml
-│   └── mailserver/                  # docker-compose.yml (Stalwart configuration)
+│   ├── personal-site/               # Faizal Portfolio (Rust container)
+│   ├── macos-desktop/               # Web MacOS Desktop (Docker container)
+│   ├── nexus/                       # Nexus Portal (Node.js backend; manually startable during migration)
+│   ├── cs-panel/                    # CS 1.6 Web Management Panel (systemd)
+│   └── personal-site/mail/          # Stalwart Mail Server (Docker container)
 ├── games/
-│   ├── cs16/                        # Symlink from /home/ubuntu/cs16_server
-│   └── minecraft/                   # Symlink from /home/ubuntu/minecraft-server
+│   ├── cs16/                        # Counter-Strike 1.6 Dedicated Server
+│   └── minecraft/                   # Bedrock Minecraft Server & Web Manager (systemd)
 └── ops/
-    ├── scripts/ (backup.sh, restore.sh, update.sh)
-    └── nginx/ (virtual hosts backup & sync)
+    ├── scripts/                     # backup.sh & restore.sh
+    └── nginx/                       # Virtual hosts backups
 ```
-> [!CAUTION]
-> Always verify paths before moving. Prefer symlinking `/opt/stack/apps/<name>` to existing folders or ensure Docker bind-mounts point directly to the new directory before stopping containers.
 
-### Step 2: Rewrite / Containerize `nexus-backend` in Rust
-- `nexus-backend` currently runs under PM2 (PID 1561983) with `nexus_portal.db` (213 MB SQLite database, 15 tables).
-- **Core Endpoints to Port to Axum + rusqlite**:
-  1. Profile & Authentication (`/api/profiles`, `/api/auth/set_pin`, `/api/auth/verify_pin`)
-  2. Telemetry & Ride Tracker (`/api/timeline/*`, `/api/ridetracker/*`)
-  3. Static Asset & Sandbox serving (`/public`, `/sandbox`, `/uploads`)
-- **Impact**: Drops memory from ~60 MB to <8 MB and allows retiring PM2.
+---
 
-### Step 3: Containerize `cs-panel` & Completely Retire PM2
-- Move `cs-panel` into a lightweight container or standalone daemon.
-- Once both `nexus-backend` and `cs-panel` are containerized:
-  ```bash
-  pm2 kill && sudo systemctl disable pm2-ubuntu
-  ```
-- **Reclaims ~35 MB of RAM** consumed solely by the PM2 master daemon, agent, and logrotate.
+## 4. Work Completed & Next Milestones
 
-### Step 4: Automate Nightly Offsite Backups
-- Add a cron job to run `/opt/stack/ops/scripts/backup.sh` daily at 03:00.
-- Optional: Add an `rclone sync /opt/backups remote:backups/` line to sync the 11 MB snapshot offsite.
+### Completed Actions in Section 4 ✅
+- **Step 1**: `/opt/stack` layout structured with symlinks (`macos-desktop`, `cs-panel`, `nexus`, `mailserver`, `cs16`, `minecraft`).
+- **Step 2**: Reconciled and optimized backup bundle (`backup.sh`) to include `messages.db` and exclude node_modules (clean 13 MB tarball).
+- **Step 3**: Replaced PM2 processes with lightweight, auto-restarting systemd units:
+  - `nexus-backend.service` (port 3010)
+  - `cs-panel.service` (port 3005)
+  - `mc-manager.service` (port 5000)
+- **Step 4**: Retired PM2 permanently (`pm2 kill`, disabled startup service).
+- **Step 5**: Scheduled nightly backups at 03:00 via crontab with log output to `/var/log/stack_backup.log`.
+
+### Future Opportunities
+1. **Progressively migrate application and game backends to Rust**:
+   - Keep each existing backend available while it is migrated; all application and game backends will move to Rust incrementally, with Nexus as one of several services in that migration.
+2. **Offsite Cloud Sync for Backups**:
+   - Configure `rclone` with an S3 or Google Drive bucket to mirror `/opt/backups/*.tar.gz` offsite automatically after each nightly run.
