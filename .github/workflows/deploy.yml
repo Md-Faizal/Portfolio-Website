@@ -202,7 +202,7 @@ jobs:
             ServerAliveInterval 15
             ServerAliveCountMax 4
             ConnectTimeout 30
-            IPQoS lowdelay
+            IPQoS cs0 cs0
             TCPKeepAlive yes
           EOF
           chmod 600 ~/.ssh/config
@@ -210,10 +210,14 @@ jobs:
           TARGET_DIR="/home/ubuntu/stack/apps/personal-site"
 
           echo "⚡ Step 1: Fast-Streaming release bundle to Primary Node ($TARGET_DIR)..."
-          ssh -n production "mkdir -p $TARGET_DIR/backend /home/ubuntu/stack/ops/ipc $TARGET_DIR/public $TARGET_DIR/frontend/dist"
+          ssh -n production "mkdir -p $TARGET_DIR/backend /home/ubuntu/stack/ops/ipc $TARGET_DIR/public $TARGET_DIR/frontend/dist && rm -f $TARGET_DIR/release.tar.gz.tmp"
 
-          # Transfer single compressed archive with legacy SCP (-O) to prevent SFTP packet window stalling
-          scp -O -C release.tar.gz production:$TARGET_DIR/release.tar.gz
+          # Transfer single compressed archive via rsync (prevents OpenSSH 9 SFTP/legacy SCP buffer stalls and DSCP drops)
+          if command -v rsync >/dev/null 2>&1; then
+            rsync -av --timeout=45 release.tar.gz production:$TARGET_DIR/release.tar.gz
+          else
+            scp -o ConnectTimeout=30 release.tar.gz production:$TARGET_DIR/release.tar.gz
+          fi
 
           echo "🐳 Step 2: Unpacking bundle & launching Primary container on my-mac..."
           ssh -n production bash -s << 'REMOTESCRIPT'
