@@ -45,8 +45,9 @@ export default function ServicesTab({ services = [], onServiceAction, onRefresh,
   const isOff = (s) => !isOnline(s);
 
   const matchesFilter = (s) => {
-    if (typeFilter === 'docker' && s.type !== 'docker') return false;
-    if (typeFilter === 'systemctl' && s.type !== 'systemctl') return false;
+    const sType = s.type || s.service_type || (s.control_type?.includes('docker') ? 'docker' : 'systemctl');
+    if (typeFilter === 'docker' && sType !== 'docker') return false;
+    if (typeFilter === 'systemctl' && sType !== 'systemctl') return false;
     if (servingFilter === 'serving' && !isActivelyServing(s)) return false;
     if (servingFilter === 'standby' && !isStandby(s)) return false;
     if (servingFilter === 'off' && !isOff(s)) return false;

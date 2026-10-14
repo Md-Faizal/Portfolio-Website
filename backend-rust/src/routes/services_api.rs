@@ -298,8 +298,8 @@ pub async fn list_services(State(_state): State<SharedState>) -> impl IntoRespon
             category: "game".into(),
             group: "On-Demand Game Engines".into(),
             status: if mc_online { "running".into() } else { "stopped".into() },
-            control_type: "systemctl".into(),
-            service_type: "systemctl".into(),
+            control_type: "remote-docker".into(),
+            service_type: "docker".into(),
             node: "container-of-souls".into(),
             enabled: false,
             port: 5000,
@@ -376,9 +376,9 @@ pub async fn control_service(
     let control_type = match service_id.as_str() {
         // Docker-controlled containers
         "stalwart-mail" | "macos-server-blue" | "personal-site-rust" => "docker",
-        "bloomberg-terminal" | "bedrock-server" | "minecraft" | "macos-server-green" => "remote-docker",
+        "bloomberg-terminal" | "bedrock-server" | "minecraft" | "mc-manager" | "macos-server-green" => "remote-docker",
         // Systemctl-controlled services
-        "cs-panel" | "mc-manager" | "nginx" | "nexus-backend" | "cockpit" => "systemctl",
+        "cs-panel" | "nginx" | "nexus-backend" | "cockpit" => "systemctl",
         // Sub-ports: no direct control (controlled via parent container)
         "stalwart-smtps" | "stalwart-imap" | "stalwart-admin" => {
             return Json(serde_json::json!({

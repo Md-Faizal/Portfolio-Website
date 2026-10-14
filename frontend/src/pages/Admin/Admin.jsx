@@ -185,7 +185,7 @@ export default function Admin({ onExit }) {
       node: 'container-of-souls',
       port: 5000,
       status: 'stopped',
-      type: 'systemctl',
+      type: 'docker',
       serving_state: 'idle',
       traffic_route: 'mine.faizal.uk (Port 5000 / 19132) on container-of-souls',
       cpu_usage: '0.0%',
@@ -276,7 +276,13 @@ export default function Admin({ onExit }) {
         const sRes = await fetchWithAuth('/api/services');
         if (sRes.ok) {
           const sJson = await sRes.json();
-          if (sJson.services) setServices(sJson.services);
+          if (sJson.services) {
+            const normalized = sJson.services.map((s) => ({
+              ...s,
+              type: s.type || s.service_type || (s.control_type?.includes('docker') ? 'docker' : s.control_type) || 'systemctl'
+            }));
+            setServices(normalized);
+          }
         }
       } catch (e) {}
 

@@ -36,14 +36,18 @@ while true; do
             "$action" 2>&1)
           exit_code=$?
         fi
-      elif [[ "$service" =~ ^(bedrock-server|minecraft|stalwart-mail|macos-server-green|personal-site-rust)$ ]]; then
-        output=$(ssh "${ssh_options[@]}" container-of-souls docker "$action" "$service" 2>&1)
+      elif [[ "$service" =~ ^(bedrock-server|minecraft|mc-manager|stalwart-mail|macos-server-green|personal-site-rust)$ ]]; then
+        target_container="$service"
+        if [[ "$service" == "mc-manager" ]]; then
+          target_container="minecraft"
+        fi
+        output=$(ssh "${ssh_options[@]}" container-of-souls "docker $action $target_container 2>&1 || docker $action $service 2>&1 || docker $action bedrock-server 2>&1")
         exit_code=$?
       else
         output="Unsupported remote-docker service '$service'"
       fi
     elif [[ "$action" =~ ^(start|stop|restart)$ ]]; then
-      if [[ "$control_type" == systemctl && "$service" =~ ^(cs-panel|mc-manager|nginx|nexus-backend)$ ]]; then
+      if [[ "$control_type" == systemctl && "$service" =~ ^(cs-panel|nginx|nexus-backend)$ ]]; then
         output=$(systemctl "$action" "${service}.service" 2>&1)
         exit_code=$?
       elif [[ "$control_type" == docker && "$service" =~ ^(stalwart-mail|macos-server-blue|personal-site-rust)$ ]]; then

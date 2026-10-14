@@ -168,7 +168,7 @@ export default function ServiceCard({ service, onAction }) {
                 border: '1px solid rgba(255, 255, 255, 0.08)'
               }}
             >
-              {service.type === 'docker' ? (
+              {(service.type === 'docker' || service.service_type === 'docker' || service.control_type?.includes('docker')) ? (
                 <Layers className={`w-4 h-4 ${isActivelyServing ? 'text-[#89ff00]' : isBothCluster ? 'text-purple-400' : 'text-sky-400'}`} />
               ) : (
                 <Cpu className={`w-4 h-4 ${isActivelyServing ? 'text-[#89ff00]' : 'text-neutral-400'}`} />
@@ -363,13 +363,13 @@ export default function ServiceCard({ service, onAction }) {
             </span>
           )}
           <span
-            className="px-2 py-1 rounded-md text-neutral-400 uppercase text-[10px]"
-            style={{
-              backgroundColor: 'rgba(255, 255, 255, 0.04)',
-              border: '1px solid rgba(255, 255, 255, 0.07)'
-            }}
+            className={`px-2 py-1 rounded-md uppercase text-[10px] font-bold ${
+              (service.type === 'docker' || service.service_type === 'docker' || service.control_type?.includes('docker'))
+                ? 'bg-blue-500/15 text-blue-400 border border-blue-500/30'
+                : 'bg-white/5 text-neutral-400 border border-white/10'
+            }`}
           >
-            {service.type}
+            {(service.type === 'docker' || service.service_type === 'docker' || service.control_type?.includes('docker')) ? 'docker' : (service.type || service.service_type || 'ctl')}
           </span>
         </div>
       </div>
