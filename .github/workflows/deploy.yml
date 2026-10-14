@@ -36,13 +36,13 @@ permissions:
 
 jobs:
   preflight-check:
-    name: 🔍 Pre-Flight Secrets & Sanity Check
+    name: "🔍 Pre-Flight Secrets & Sanity Check"
     runs-on: ubuntu-latest
     steps:
-      - name: 📥 Checkout Source Code
+      - name: "📥 Checkout Source Code"
         uses: actions/checkout@v4
 
-      - name: 🛡️ Verify Primary VM Secrets
+      - name: "🛡️ Verify Primary VM Secrets"
         if: github.event.inputs.dry_run != 'true'
         env:
           SSH_HOST: ${{ secrets.SSH_HOST }}
@@ -60,20 +60,20 @@ jobs:
           echo "✅ Primary node credentials present."
 
   build-frontend:
-    name: 🌐 Swarm Worker: Frontend Build & Admin Bundle
+    name: "🌐 Swarm Worker: Frontend Build & Admin Bundle"
     runs-on: ubuntu-latest
     steps:
-      - name: 📥 Checkout Source Code
+      - name: "📥 Checkout Source Code"
         uses: actions/checkout@v4
 
-      - name: 🟢 Setup Node.js 20 with Dependency Caching
+      - name: "🟢 Setup Node.js 20 with Dependency Caching"
         uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: 'npm'
           cache-dependency-path: 'frontend/package-lock.json'
 
-      - name: ⚡ Install & Build React Frontend and Admin Console
+      - name: "⚡ Install & Build React Frontend and Admin Console"
         run: |
           cd frontend
           npm ci --prefer-offline
@@ -88,14 +88,14 @@ jobs:
           cp -r dist-admin/assets/* dist/assets/
           cd ..
 
-      - name: 📦 Upload Frontend Distribution Artifact
+      - name: "📦 Upload Frontend Distribution Artifact"
         uses: actions/upload-artifact@v4
         with:
           name: frontend-dist
           path: frontend/dist/
           retention-days: 1
 
-      - name: 📦 Upload Public Assets Artifact
+      - name: "📦 Upload Public Assets Artifact"
         uses: actions/upload-artifact@v4
         with:
           name: public-assets
@@ -103,21 +103,21 @@ jobs:
           retention-days: 1
 
   build-backend:
-    name: 🦀 Swarm Worker: Rust Axum Compilation
+    name: "🦀 Swarm Worker: Rust Axum Compilation"
     runs-on: ubuntu-latest
     steps:
-      - name: 📥 Checkout Source Code
+      - name: "📥 Checkout Source Code"
         uses: actions/checkout@v4
 
-      - name: 🦀 Setup Rust Toolchain
+      - name: "🦀 Setup Rust Toolchain"
         uses: dtolnay/rust-toolchain@stable
 
-      - name: ⚡ Cache Rust Dependencies & Build Artifacts
+      - name: "⚡ Cache Rust Dependencies & Build Artifacts"
         uses: Swatinem/rust-cache@v2
         with:
-          workspaces: backend-rust -> target
+          workspaces: "backend-rust -> target"
 
-      - name: 🚀 Compile & Strip Release Binary
+      - name: "🚀 Compile & Strip Release Binary"
         run: |
           cd backend-rust
           cargo build --release
@@ -127,7 +127,7 @@ jobs:
           chmod +x ./personal-site-rust
           ls -lh ./personal-site-rust
 
-      - name: 📦 Upload Backend Binary Artifact
+      - name: "📦 Upload Backend Binary Artifact"
         uses: actions/upload-artifact@v4
         with:
           name: backend-binary
@@ -135,38 +135,38 @@ jobs:
           retention-days: 1
 
   deploy-cluster:
-    name: 🚀 Deploy Cluster (Primary: my-mac & Standby: cos)
+    name: "🚀 Deploy Cluster (Primary: my-mac & Standby: cos)"
     needs: [preflight-check, build-frontend, build-backend]
     if: github.event.inputs.dry_run != 'true'
     runs-on: ubuntu-latest
     steps:
-      - name: 📥 Checkout Repository
+      - name: "📥 Checkout Repository"
         uses: actions/checkout@v4
 
-      - name: 📥 Download Frontend Distribution
+      - name: "📥 Download Frontend Distribution"
         uses: actions/download-artifact@v4
         with:
           name: frontend-dist
           path: frontend/dist
 
-      - name: 📥 Download Public Assets
+      - name: "📥 Download Public Assets"
         uses: actions/download-artifact@v4
         with:
           name: public-assets
           path: public
 
-      - name: 📥 Download Backend Binary
+      - name: "📥 Download Backend Binary"
         uses: actions/download-artifact@v4
         with:
           name: backend-binary
           path: .
 
-      - name: 🔧 Prepare Binary Permissions
+      - name: "🔧 Prepare Binary Permissions"
         run: |
           chmod +x ./personal-site-rust
           ls -lh ./personal-site-rust
 
-      - name: 🔌 Deploy to Primary Node (my-mac)
+      - name: "🔌 Deploy to Primary Node (my-mac)"
         env:
           SSH_HOST: ${{ secrets.SSH_HOST }}
           SSH_USER: ${{ secrets.SSH_USER }}
@@ -228,7 +228,7 @@ jobs:
           echo "✅ Primary personal-site-rust container on my-mac is healthy and serving requests!"
           REMOTESCRIPT
 
-      - name: 🛰️ Deploy to Standby Node (container-of-souls)
+      - name: "🛰️ Deploy to Standby Node (container-of-souls)"
         env:
           COS_SSH_HOST: ${{ secrets.COS_SSH_HOST }}
           COS_SSH_USER: ${{ secrets.COS_SSH_USER || 'ubuntu' }}
