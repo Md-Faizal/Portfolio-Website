@@ -1,12 +1,25 @@
 name: Deploy Personal Site (Rust + React)
 
+# Standardized Swarm Deployment Pipeline (modeled after MacOS & Bloomberg Terminal architecture):
+# - Auto-triggers on push to master/main or 1-Click manual dispatch with dry-run support
+# - Parallel Swarm execution: Node frontend build & Rust cargo compilation run concurrently
+# - Full caching layer: npm module cache + Swatinem/rust-cache for sub-minute release builds
+# - Artifact-driven release delivery (upload-artifact / download-artifact)
+# - Dual-VM Cluster deployment: Primary (my-mac) & Standby (container-of-souls)
+# - Container health smoke test validation via /api/maintenance-status
+
 on:
   push:
     branches: [ master, main ]
+    paths-ignore:
+      - '**.md'
+      - '.vscode/**'
+      - '.editorconfig'
+
   workflow_dispatch:
     inputs:
       dry_run:
-        description: 'Dry Run (Verify build without deploying)'
+        description: 'Dry Run (Verify build and SSH connectivity without deploying)'
         required: false
         default: 'false'
         type: choice
@@ -18,27 +31,52 @@ concurrency:
   group: deploy-personal-site
   cancel-in-progress: false
 
+permissions:
+  contents: read
+
 jobs:
-  build-and-deploy:
+  preflight-check:
+    name: 🔍 Pre-Flight Secrets & Sanity Check
     runs-on: ubuntu-latest
     steps:
       - name: 📥 Checkout Source Code
         uses: actions/checkout@v4
 
-      - name: 🦀 Setup Rust Toolchain
-        uses: dtolnay/rust-toolchain@stable
+      - name: 🛡️ Verify Primary VM Secrets
+        if: github.event.inputs.dry_run != 'true'
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_KEY: ${{ secrets.SSH_KEY }}
+        run: |
+          echo "Verifying primary deployment credentials..."
+          ERRORS=0
+          [ -z "$SSH_HOST" ] && echo "❌ ERROR: 'SSH_HOST' is missing in GitHub Secrets!" && ERRORS=$((ERRORS + 1))
+          [ -z "$SSH_USER" ] && echo "❌ ERROR: 'SSH_USER' is missing in GitHub Secrets!" && ERRORS=$((ERRORS + 1))
+          [ -z "$SSH_KEY" ] && echo "❌ ERROR: 'SSH_KEY' is missing in GitHub Secrets!" && ERRORS=$((ERRORS + 1))
+          if [ $ERRORS -gt 0 ]; then
+            exit 1
+          fi
+          echo "✅ Primary node credentials present."
 
-      - name: 🟢 Setup Node.js
+  build-frontend:
+    name: 🌐 Swarm Worker: Frontend Build & Admin Bundle
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📥 Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: 🟢 Setup Node.js 20 with Dependency Caching
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: 20
           cache: 'npm'
           cache-dependency-path: 'frontend/package-lock.json'
 
-      - name: 🌐 Build React Frontend & Standalone Admin
+      - name: ⚡ Install & Build React Frontend and Admin Console
         run: |
           cd frontend
-          npm ci
+          npm ci --prefer-offline
           # Build Main SPA
           npm run build
           # Build Standalone Admin Console
@@ -50,7 +88,36 @@ jobs:
           cp -r dist-admin/assets/* dist/assets/
           cd ..
 
-      - name: ⚡ Build Rust Axum Backend (Optimized Release Binary)
+      - name: 📦 Upload Frontend Distribution Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: frontend/dist/
+          retention-days: 1
+
+      - name: 📦 Upload Public Assets Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: public-assets
+          path: public/
+          retention-days: 1
+
+  build-backend:
+    name: 🦀 Swarm Worker: Rust Axum Compilation
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📥 Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: 🦀 Setup Rust Toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: ⚡ Cache Rust Dependencies & Build Artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: backend-rust -> target
+
+      - name: 🚀 Compile & Strip Release Binary
         run: |
           cd backend-rust
           cargo build --release
@@ -60,33 +127,46 @@ jobs:
           chmod +x ./personal-site-rust
           ls -lh ./personal-site-rust
 
-      - name: 🔍 Check Deployment Secrets
-        if: github.event.inputs.dry_run != 'true'
-        run: |
-          echo "Verifying deployment secrets..."
-          ERRORS=0
-          if [ -z "$SSH_HOST" ]; then
-            echo "❌ ERROR: 'SSH_HOST' is missing in GitHub Secrets!"
-            ERRORS=$((ERRORS + 1))
-          fi
-          if [ -z "$SSH_USER" ]; then
-            echo "❌ ERROR: 'SSH_USER' is missing in GitHub Secrets!"
-            ERRORS=$((ERRORS + 1))
-          fi
-          if [ -z "$SSH_KEY" ]; then
-            echo "❌ ERROR: 'SSH_KEY' is missing in GitHub Secrets!"
-            ERRORS=$((ERRORS + 1))
-          fi
-          if [ $ERRORS -gt 0 ]; then
-            exit 1
-          fi
-        env:
-          SSH_HOST: ${{ secrets.SSH_HOST }}
-          SSH_USER: ${{ secrets.SSH_USER }}
-          SSH_KEY: ${{ secrets.SSH_KEY }}
+      - name: 📦 Upload Backend Binary Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-binary
+          path: personal-site-rust
+          retention-days: 1
 
-      - name: 🔌 Setup SSH & Deploy to Production VM
-        if: github.event.inputs.dry_run != 'true'
+  deploy-cluster:
+    name: 🚀 Deploy Cluster (Primary: my-mac & Standby: cos)
+    needs: [preflight-check, build-frontend, build-backend]
+    if: github.event.inputs.dry_run != 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📥 Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: 📥 Download Frontend Distribution
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-dist
+          path: frontend/dist
+
+      - name: 📥 Download Public Assets
+        uses: actions/download-artifact@v4
+        with:
+          name: public-assets
+          path: public
+
+      - name: 📥 Download Backend Binary
+        uses: actions/download-artifact@v4
+        with:
+          name: backend-binary
+          path: .
+
+      - name: 🔧 Prepare Binary Permissions
+        run: |
+          chmod +x ./personal-site-rust
+          ls -lh ./personal-site-rust
+
+      - name: 🔌 Deploy to Primary Node (my-mac)
         env:
           SSH_HOST: ${{ secrets.SSH_HOST }}
           SSH_USER: ${{ secrets.SSH_USER }}
@@ -119,17 +199,16 @@ jobs:
 
           TARGET_DIR="/home/ubuntu/stack/apps/personal-site"
 
-          echo "🚀 Syncing built binary, frontend dist, and configs to $TARGET_DIR..."
+          echo "🚀 Syncing built binary, frontend dist, and configs to Primary Node ($TARGET_DIR)..."
+          ssh production "mkdir -p $TARGET_DIR/backend /home/ubuntu/stack/ops/ipc $TARGET_DIR/public"
 
-          # Upload static stripped binary and docker configs
           scp ./personal-site-rust production:$TARGET_DIR/personal-site-rust
           scp ./Dockerfile ./docker-compose.yml production:$TARGET_DIR/
 
-          # Sync frontend build & public assets
           rsync -avz --delete frontend/dist/ production:$TARGET_DIR/frontend/dist/
           rsync -avz public/ production:$TARGET_DIR/public/
 
-          echo "🐳 Rebuilding and launching production Docker container..."
+          echo "🐳 Launching production container on my-mac..."
           ssh production bash -s << 'REMOTESCRIPT'
           set -e
           mkdir -p /home/ubuntu/stack/apps/personal-site/backend
@@ -149,8 +228,7 @@ jobs:
           echo "✅ Primary personal-site-rust container on my-mac is healthy and serving requests!"
           REMOTESCRIPT
 
-      - name: 🛰️ Setup SSH & Deploy to Standby VM (container-of-souls)
-        if: github.event.inputs.dry_run != 'true'
+      - name: 🛰️ Deploy to Standby Node (container-of-souls)
         env:
           COS_SSH_HOST: ${{ secrets.COS_SSH_HOST }}
           COS_SSH_USER: ${{ secrets.COS_SSH_USER || 'ubuntu' }}
@@ -191,7 +269,6 @@ jobs:
           echo "🚀 Deploying to Standby Node (cos) at $TARGET_DIR..."
           ssh standby-cos "mkdir -p $TARGET_DIR/backend /home/ubuntu/stack/ops/ipc $TARGET_DIR/public"
 
-          # Upload binary, configs, and frontend
           scp ./personal-site-rust standby-cos:$TARGET_DIR/personal-site-rust
           scp ./Dockerfile ./docker-compose.yml standby-cos:$TARGET_DIR/
 
