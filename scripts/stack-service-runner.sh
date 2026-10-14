@@ -36,7 +36,7 @@ while true; do
             "$action" 2>&1)
           exit_code=$?
         fi
-      elif [[ "$service" =~ ^(bedrock-server|minecraft|mc-manager|stalwart-mail|macos-server-green|personal-site-rust)$ ]]; then
+      elif [[ "$service" =~ ^(bedrock-server|minecraft|mc-manager|stalwart-mail|stalwart-mail-standby|macos-server-green|personal-site-rust)$ ]]; then
         target_container="$service"
         if [[ "$service" == "mc-manager" ]]; then
           target_container="minecraft"

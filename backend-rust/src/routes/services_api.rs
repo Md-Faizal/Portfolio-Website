@@ -271,6 +271,25 @@ pub async fn list_services(State(_state): State<SharedState>) -> impl IntoRespon
             serving_state: if stall_imap { "active".into() } else { "stopped".into() },
             traffic_route: "Actively Serving: Inbound IMAPS (Port 993) on my-mac".into(),
         },
+        ServiceInfo {
+            id: "stalwart-mail-standby".into(),
+            name: "Stalwart Mail (Standby Replica)".into(),
+            description: "Hot-standby failover mail node on container-of-souls with replicated /var/lib/stalwart volume".into(),
+            category: "mail".into(),
+            group: "Mail Infrastructure".into(),
+            status: "running".into(),
+            control_type: "remote-docker".into(),
+            service_type: "docker".into(),
+            node: "container-of-souls".into(),
+            enabled: true,
+            port: 8080,
+            memory_mb: 65.0,
+            cpu_usage: "0.4% avg".into(),
+            ram_usage: "65 MB".into(),
+            storage_usage: "280 MB".into(),
+            serving_state: "standby".into(),
+            traffic_route: "Hot Standby Slot: container-of-souls (Mail Failover & VCN Sync)".into(),
+        },
         // ── Game Engines (on-demand) ─────────────────────────────────────────
         ServiceInfo {
             id: "cs-panel".into(),
@@ -376,7 +395,7 @@ pub async fn control_service(
     let control_type = match service_id.as_str() {
         // Docker-controlled containers
         "stalwart-mail" | "macos-server-blue" | "personal-site-rust" => "docker",
-        "bloomberg-terminal" | "bedrock-server" | "minecraft" | "mc-manager" | "macos-server-green" => "remote-docker",
+        "stalwart-mail-standby" | "bloomberg-terminal" | "bedrock-server" | "minecraft" | "mc-manager" | "macos-server-green" => "remote-docker",
         // Systemctl-controlled services
         "cs-panel" | "nginx" | "nexus-backend" | "cockpit" => "systemctl",
         // Sub-ports: no direct control (controlled via parent container)

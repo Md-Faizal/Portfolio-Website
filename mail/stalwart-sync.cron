@@ -1,0 +1,3 @@
+# Automated Stalwart Mail Data & Config Sync (Primary -> Standby)
+# Syncs /var/lib/stalwart and LetsEncrypt certs over the high-speed 10Gbps Oracle VCN
+0 */3 * * * rsync -avz --delete -e "ssh -i /home/ubuntu/.ssh/cockpit-container-of-souls -o StrictHostKeyChecking=no" /home/ubuntu/stack/apps/personal-site/mail/data/ ubuntu@10.0.0.195:/home/ubuntu/stack/apps/personal-site/mail/data/ >> /home/ubuntu/stack/ops/logs/stalwart-sync.log 2>&1

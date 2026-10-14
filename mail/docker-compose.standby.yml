@@ -1,0 +1,18 @@
+services:
+  stalwart-standby:
+    image: stalwartlabs/stalwart:latest
+    container_name: stalwart-mail-standby
+    hostname: mail-standby.faizal.uk
+    network_mode: host
+    restart: unless-stopped
+    environment:
+      - STALWART_RECOVERY_ADMIN=admin:FaizalAdmin2026!
+    volumes:
+      - ./data:/var/lib/stalwart:ro
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+      - /etc/localtime:/etc/localtime:ro
+    deploy:
+      resources:
+        limits:
+          cpus: '0.4'
+          memory: 256M

@@ -180,6 +180,19 @@ export default function Admin({ onExit }) {
       storage_usage: '520 MB'
     },
     {
+      id: 'stalwart-mail-standby',
+      name: 'Stalwart Mail (Standby Replica)',
+      node: 'container-of-souls',
+      port: 8080,
+      status: 'running',
+      type: 'docker',
+      serving_state: 'standby',
+      traffic_route: 'Hot Standby Slot: container-of-souls (Mail Failover & VCN Sync)',
+      cpu_usage: '0.4% avg',
+      ram_usage: '65 MB',
+      storage_usage: '280 MB'
+    },
+    {
       id: 'mc-manager',
       name: 'Minecraft Bedrock Manager',
       node: 'container-of-souls',
