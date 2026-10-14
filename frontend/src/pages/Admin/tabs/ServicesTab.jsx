@@ -19,7 +19,7 @@ import ServiceCard from '../components/ServiceCard';
 export default function ServicesTab({ services = [], onServiceAction, onRefresh, refreshing }) {
   const [nodeFilter, setNodeFilter] = useState('all'); // 'all' | 'primary' | 'secondary' | 'both'
   const [typeFilter, setTypeFilter] = useState('all'); // 'all' | 'docker' | 'systemctl'
-  const [servingFilter, setServingFilter] = useState('all'); // 'all' | 'serving' | 'standby'
+  const [servingFilter, setServingFilter] = useState('all'); // 'all' | 'serving' | 'standby' | 'off'
 
   const getNodeCategory = (service) => {
     const node = (service.node || '').toLowerCase();
@@ -42,22 +42,34 @@ export default function ServicesTab({ services = [], onServiceAction, onRefresh,
     return (st === 'active' || st === 'both') && isOnline(s);
   };
   const isStandby = (s) => getServingStatus(s) === 'standby';
+  const isOff = (s) => !isOnline(s);
 
   const matchesFilter = (s) => {
     if (typeFilter === 'docker' && s.type !== 'docker') return false;
     if (typeFilter === 'systemctl' && s.type !== 'systemctl') return false;
     if (servingFilter === 'serving' && !isActivelyServing(s)) return false;
     if (servingFilter === 'standby' && !isStandby(s)) return false;
+    if (servingFilter === 'off' && !isOff(s)) return false;
     return true;
   };
+
+  // Status sorting: Actively Serving first (1), Standby replicas second (2), Other Online third (3), Off/Stopped last (4)
+  const serviceSortWeight = (s) => {
+    if (isActivelyServing(s)) return 1;
+    if (isStandby(s)) return 2;
+    if (isOnline(s)) return 3;
+    return 4;
+  };
+
+  const sortServices = (arr) => [...arr].sort((a, b) => serviceSortWeight(a) - serviceSortWeight(b));
 
   const primaryServices = services.filter((s) => getNodeCategory(s) === 'primary');
   const secondaryServices = services.filter((s) => getNodeCategory(s) === 'secondary');
   const bothServices = services.filter((s) => getNodeCategory(s) === 'both');
 
-  const visiblePrimary = primaryServices.filter(matchesFilter);
-  const visibleSecondary = secondaryServices.filter(matchesFilter);
-  const visibleBoth = bothServices.filter(matchesFilter);
+  const visiblePrimary = sortServices(primaryServices.filter(matchesFilter));
+  const visibleSecondary = sortServices(secondaryServices.filter(matchesFilter));
+  const visibleBoth = sortServices(bothServices.filter(matchesFilter));
 
   const primaryOnline = primaryServices.filter(isOnline).length;
   const secondaryOnline = secondaryServices.filter(isOnline).length;
@@ -66,6 +78,7 @@ export default function ServicesTab({ services = [], onServiceAction, onRefresh,
 
   const activeServingCount = services.filter(isActivelyServing).length;
   const standbyCount = services.filter(isStandby).length;
+  const offCount = services.filter(isOff).length;
 
   return (
     <div className="space-y-8" style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
@@ -123,6 +136,20 @@ export default function ServicesTab({ services = [], onServiceAction, onRefresh,
             <span className="w-2 h-2 rounded-full bg-sky-400" />
             <span className="text-neutral-300">
               <strong className="text-sky-400">{standbyCount}</strong> Standby Replicas
+            </span>
+          </div>
+
+          {/* Off / Stopped Pill */}
+          <div
+            className="flex items-center gap-2 px-3.5 py-2 rounded-2xl text-xs font-mono"
+            style={{
+              backgroundColor: 'rgba(255, 51, 102, 0.08)',
+              border: '1px solid rgba(255, 51, 102, 0.25)'
+            }}
+          >
+            <span className="w-2 h-2 rounded-full bg-[#ff3366]" />
+            <span className="text-neutral-300">
+              <strong className="text-[#ff3366]">{offCount}</strong> Off / Stopped
             </span>
           </div>
 
@@ -245,6 +272,17 @@ export default function ServicesTab({ services = [], onServiceAction, onRefresh,
             >
               <span className="w-1.5 h-1.5 rounded-full bg-sky-400" />
               <span>Standby ({standbyCount})</span>
+            </button>
+            <button
+              onClick={() => setServingFilter('off')}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
+                servingFilter === 'off'
+                  ? 'bg-[#ff3366]/20 text-[#ff3366] font-bold'
+                  : 'text-neutral-400 hover:text-[#ff3366]'
+              }`}
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-[#ff3366]" />
+              <span>Off ({offCount})</span>
             </button>
           </div>
 
