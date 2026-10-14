@@ -134,8 +134,8 @@ jobs:
           path: personal-site-rust
           retention-days: 1
 
-  deploy-primary:
-    name: "🔌 Swarm Deploy: Primary Node (my-mac)"
+  deploy-cluster:
+    name: "🚀 Swarm Deploy: Dual-Node Cluster (my-mac & cos)"
     needs: [preflight-check, build-frontend, build-backend]
     if: github.event.inputs.dry_run != 'true'
     runs-on: ubuntu-latest
@@ -168,7 +168,7 @@ jobs:
           tar -czf release.tar.gz personal-site-rust Dockerfile docker-compose.yml frontend/dist public
           ls -lh release.tar.gz
 
-      - name: "🚀 Deploy & Hot-Reload on Primary Node (my-mac)"
+      - name: "🔌 Deploy Primary (my-mac) & Propagate to Standby (cos)"
         env:
           SSH_HOST: ${{ secrets.SSH_HOST }}
           SSH_USER: ${{ secrets.SSH_USER }}
@@ -208,13 +208,13 @@ jobs:
 
           TARGET_DIR="/home/ubuntu/stack/apps/personal-site"
 
-          echo "⚡ Fast-Streaming release bundle to Primary Node ($TARGET_DIR)..."
+          echo "⚡ Step 1: Fast-Streaming release bundle to Primary Node ($TARGET_DIR)..."
           ssh -n production "mkdir -p $TARGET_DIR/backend /home/ubuntu/stack/ops/ipc $TARGET_DIR/public $TARGET_DIR/frontend/dist"
 
           # Transfer single compressed archive with legacy SCP (-O) to prevent SFTP packet window stalling
           scp -O -C release.tar.gz production:$TARGET_DIR/release.tar.gz
 
-          echo "🐳 Unpacking bundle & launching production container on my-mac..."
+          echo "🐳 Step 2: Unpacking bundle & launching Primary container on my-mac..."
           ssh -n production bash -s << 'REMOTESCRIPT'
           set -e
           TARGET_DIR="/home/ubuntu/stack/apps/personal-site"
@@ -235,112 +235,43 @@ jobs:
           docker ps --filter "name=personal-site-rust"
           curl -sS http://127.0.0.1:3002/api/maintenance-status || exit 1
           echo "✅ Primary personal-site-rust container on my-mac is healthy and serving requests!"
-          REMOTESCRIPT
 
-  deploy-standby:
-    name: "🛰️ Swarm Deploy: Standby Node (container-of-souls)"
-    needs: [preflight-check, build-frontend, build-backend]
-    if: github.event.inputs.dry_run != 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - name: "📥 Checkout Repository"
-        uses: actions/checkout@v4
+          # Step 3: Propagate to Standby Node (cos @ 10.0.0.195) via high-speed internal Oracle VCN
+          echo "🛰️ Step 3: Propagating release to Standby Node (cos @ 10.0.0.195)..."
+          if [ -f "/home/ubuntu/.ssh/cockpit-container-of-souls" ]; then
+            # Atomic binary sync to prevent ETXTBSY or corrupt section headers
+            scp -o StrictHostKeyChecking=no -i /home/ubuntu/.ssh/cockpit-container-of-souls \
+              "$TARGET_DIR/personal-site-rust" ubuntu@10.0.0.195:"$TARGET_DIR/personal-site-rust.tmp"
 
-      - name: "📥 Download Frontend Distribution"
-        uses: actions/download-artifact@v4
-        with:
-          name: frontend-dist
-          path: frontend/dist
+            # Sync configs and assets with directory-time safety
+            rsync -rlptD --omit-dir-times --no-o --no-g \
+              -e "ssh -i /home/ubuntu/.ssh/cockpit-container-of-souls -o StrictHostKeyChecking=no" \
+              --exclude "mail" \
+              --exclude "backups" \
+              --exclude "target" \
+              --exclude "node_modules" \
+              --exclude ".git" \
+              --exclude "*.db*" \
+              --exclude "*.tar.gz" \
+              --exclude "public/uploads" \
+              --exclude "personal-site-rust*" \
+              "$TARGET_DIR/" ubuntu@10.0.0.195:"$TARGET_DIR/"
 
-      - name: "📥 Download Public Assets"
-        uses: actions/download-artifact@v4
-        with:
-          name: public-assets
-          path: public
-
-      - name: "📥 Download Backend Binary"
-        uses: actions/download-artifact@v4
-        with:
-          name: backend-binary
-          path: .
-
-      - name: "📦 Package Compressed Swarm Release Bundle"
-        run: |
-          chmod +x ./personal-site-rust
-          tar -czf release.tar.gz personal-site-rust Dockerfile docker-compose.yml frontend/dist public
-          ls -lh release.tar.gz
-
-      - name: "🚀 Deploy & Hot-Reload on Standby Node (container-of-souls)"
-        env:
-          COS_SSH_HOST: ${{ secrets.COS_SSH_HOST }}
-          COS_SSH_USER: ${{ secrets.COS_SSH_USER || 'ubuntu' }}
-          COS_SSH_KEY: ${{ secrets.COS_SSH_KEY }}
-        run: |
-          set -euo pipefail
-
-          if [ -z "$COS_SSH_HOST" ] || [ -z "$COS_SSH_KEY" ]; then
-            echo "ℹ️ Standby VM (cos) secrets not configured; skipping standby deployment."
-            exit 0
-          fi
-
-          mkdir -p ~/.ssh
-          chmod 700 ~/.ssh
-
-          if echo "$COS_SSH_KEY" | grep -q "^LS0t"; then
-            echo "$COS_SSH_KEY" | base64 -d > ~/.ssh/cos_deploy_key
-          elif echo "$COS_SSH_KEY" | grep -q "BEGIN"; then
-            echo "$COS_SSH_KEY" | tr -d '\r' > ~/.ssh/cos_deploy_key
+            # Atomically swap binary and deploy standby container on cos
+            ssh -o StrictHostKeyChecking=no -i /home/ubuntu/.ssh/cockpit-container-of-souls ubuntu@10.0.0.195 bash -s << 'COS_DEPLOY'
+            set -e
+            TARGET_DIR="/home/ubuntu/stack/apps/personal-site"
+            cd "$TARGET_DIR"
+            mv -f personal-site-rust.tmp personal-site-rust
+            chmod +x personal-site-rust
+            mkdir -p backend
+            touch backend/messages.db
+            NODE_ROLE=standby docker compose up -d --build --remove-orphans
+            sleep 4
+            curl -sS http://127.0.0.1:3002/api/maintenance-status || exit 1
+            echo "✅ Standby personal-site-rust container on cos is healthy and ready!"
+          COS_DEPLOY
           else
-            echo "$COS_SSH_KEY" | base64 -d > ~/.ssh/cos_deploy_key 2>/dev/null || echo "$COS_SSH_KEY" > ~/.ssh/cos_deploy_key
+            echo "⚠️ Standby key /home/ubuntu/.ssh/cockpit-container-of-souls not found; skipping standby sync."
           fi
-          chmod 600 ~/.ssh/cos_deploy_key
-
-          cat << 'EOF' > ~/.ssh/config
-          Host standby-cos
-            HostName ${{ secrets.COS_SSH_HOST }}
-            User ${{ secrets.COS_SSH_USER || 'ubuntu' }}
-            IdentityFile ~/.ssh/cos_deploy_key
-            Port 22
-            StrictHostKeyChecking no
-            UserKnownHostsFile /dev/null
-            PubkeyAcceptedKeyTypes +ssh-rsa,rsa-sha2-256,rsa-sha2-512
-            HostkeyAlgorithms +ssh-rsa,rsa-sha2-256,rsa-sha2-512
-            ServerAliveInterval 15
-            ServerAliveCountMax 4
-            ConnectTimeout 30
-            IPQoS lowdelay
-            TCPKeepAlive yes
-          EOF
-          chmod 600 ~/.ssh/config
-
-          TARGET_DIR="/home/ubuntu/stack/apps/personal-site"
-
-          echo "⚡ Fast-Streaming release bundle to Standby Node (cos) at $TARGET_DIR..."
-          ssh -n standby-cos "mkdir -p $TARGET_DIR/backend /home/ubuntu/stack/ops/ipc $TARGET_DIR/public $TARGET_DIR/frontend/dist"
-
-          # Transfer single compressed archive with legacy SCP (-O) to prevent SFTP packet window stalling
-          scp -O -C release.tar.gz standby-cos:$TARGET_DIR/release.tar.gz
-
-          echo "🐳 Unpacking bundle & launching standby Docker container on cos..."
-          ssh -n standby-cos bash -s << 'REMOTESCRIPT'
-          set -e
-          TARGET_DIR="/home/ubuntu/stack/apps/personal-site"
-          cd "$TARGET_DIR"
-
-          # Atomic unpack
-          tar -xzf release.tar.gz
-          rm -f release.tar.gz
-
-          # Ensure messages.db exists so docker bind-mount doesn't create it as a directory
-          mkdir -p "$TARGET_DIR/backend"
-          touch "$TARGET_DIR/backend/messages.db"
-
-          # Deploy in Standby mode
-          NODE_ROLE=standby docker compose up -d --build --remove-orphans
-
-          # Verify container health
-          sleep 5
-          docker ps --filter "name=personal-site-rust"
-          curl -sS http://127.0.0.1:3002/api/maintenance-status || exit 1
-          echo "✅ Standby personal-site-rust container on cos is healthy and ready!"
           REMOTESCRIPT
