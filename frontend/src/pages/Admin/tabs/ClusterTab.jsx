@@ -151,12 +151,16 @@ export default function ClusterTab({ cluster, onOpenReportPreview }) {
                 <h3 className="text-base sm:text-lg font-bold text-white leading-tight">
                   Node 02 // Standby Node // {slave.node || 'container-of-souls'}
                 </h3>
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-sky-500/15 text-sky-400 border border-sky-500/30">
+                <span className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-bold ${
+                  (slave.status || 'online').toLowerCase() === 'online'
+                    ? 'bg-sky-500/15 text-sky-400 border border-sky-500/30'
+                    : 'bg-red-500/15 text-red-400 border border-red-500/30'
+                }`}>
                   {slave.status?.toUpperCase() || 'ONLINE'}
                 </span>
               </div>
               <p className="text-xs font-mono text-neutral-400 mt-0.5">
-                IP: <strong className="text-white">{slave.ip || '10.0.0.195'}</strong> &bull; OS: {slave.os || 'Ubuntu 26.04 LTS'} &bull; Role: Standby & On-Demand Services
+                IP: <strong className="text-white">{slave.ip || '10.0.0.195'}</strong> &bull; OS: {slave.os || 'Ubuntu 24.04.5 LTS'} &bull; Role: Standby & On-Demand Services &bull; Uptime: {formatUptime(slave.uptime)}
               </p>
             </div>
           </div>

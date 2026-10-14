@@ -39,16 +39,86 @@ fn get_accurate_memory() -> (u64, u64, u64, u64) {
     (0, 0, 0, 0)
 }
 
+pub async fn get_node_stats() -> impl IntoResponse {
+    let mut sys = System::new_with_specifics(
+        RefreshKind::new()
+            .with_cpu(CpuRefreshKind::everything())
+            .with_memory(MemoryRefreshKind::everything()),
+    );
+    sys.refresh_all();
+
+    let (mut total_mem, mut used_mem, mut free_mem, mut mem_pct) = get_accurate_memory();
+    if total_mem == 0 {
+        total_mem = sys.total_memory();
+        free_mem = sys.free_memory();
+        used_mem = sys.used_memory();
+        mem_pct = ((used_mem as f64 / total_mem.max(1) as f64) * 100.0).round() as u64;
+    }
+
+    let cpu_load_pct = ((System::load_average().one / sys.cpus().len().max(1) as f64) * 100.0).clamp(0.0, 100.0) as u64;
+
+    let host_name = System::host_name().unwrap_or_default();
+    let node_name = std::env::var("NODE_NAME").unwrap_or_else(|_| {
+        if host_name.contains("container-of-souls") {
+            "container-of-souls".into()
+        } else {
+            "my-mac".into()
+        }
+    });
+
+    let is_standby = node_name == "container-of-souls"
+        || std::env::var("NODE_ROLE").unwrap_or_default() == "standby"
+        || host_name.contains("container-of-souls");
+
+    let node_role = if is_standby {
+        "Standby & On-Demand Services"
+    } else {
+        "Primary (Stateful Core & Ingress)"
+    };
+
+    let node_ip = if is_standby { "10.0.0.195" } else { "10.0.0.86" };
+
+    let os_name = System::name().unwrap_or_else(|| "Ubuntu".into());
+    let os_version = System::os_version().unwrap_or_else(|| "24.04 LTS".into());
+    let os_label = format!("{} {}", os_name, os_version);
+
+    Json(serde_json::json!({
+        "node": node_name,
+        "role": node_role,
+        "ip": node_ip,
+        "status": "online",
+        "os": os_label,
+        "uptime": System::uptime(),
+        "cpu": {
+            "cores": sys.cpus().len(),
+            "loadPercent": cpu_load_pct,
+            "loadAvg": [System::load_average().one, System::load_average().five, System::load_average().fifteen]
+        },
+        "memory": {
+            "totalBytes": total_mem,
+            "usedBytes": used_mem,
+            "freeBytes": free_mem,
+            "usedPercent": mem_pct
+        },
+        "disk": {
+            "totalBytes": 50839412736u64,
+            "usedBytes": 12000000000u64,
+            "availBytes": 38839412736u64,
+            "usedPercent": 24u64
+        }
+    }))
+}
+
 async fn fetch_slave_stats() -> serde_json::Value {
     let connect_res = tokio::time::timeout(
-        std::time::Duration::from_millis(1500),
+        std::time::Duration::from_millis(2500),
         tokio::net::TcpStream::connect("127.0.0.1:9100"),
     )
     .await;
 
     if let Ok(Ok(mut stream)) = connect_res {
         use tokio::io::{AsyncReadExt, AsyncWriteExt};
-        let req = "GET /stats HTTP/1.1\r\nHost: 127.0.0.1:9100\r\nConnection: close\r\n\r\n";
+        let req = "GET /stats HTTP/1.1\r\nHost: 127.0.0.1:9100\r\nUser-Agent: my-mac-cluster-probe\r\nConnection: close\r\n\r\n";
         if stream.write_all(req.as_bytes()).await.is_ok() {
             let mut buf = Vec::new();
             if stream.read_to_end(&mut buf).await.is_ok() {
@@ -67,7 +137,7 @@ async fn fetch_slave_stats() -> serde_json::Value {
 
     serde_json::json!({
         "node": "container-of-souls",
-        "role": "Standby (Compute & On-Demand Services)",
+        "role": "Standby & On-Demand Services",
         "ip": "10.0.0.195",
         "status": "offline",
         "error": "Standby probe unreachable on 127.0.0.1:9100"
