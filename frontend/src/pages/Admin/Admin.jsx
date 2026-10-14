@@ -70,7 +70,10 @@ export default function Admin({ onExit }) {
       status: 'running',
       type: 'docker',
       serving_state: 'both',
-      traffic_route: 'Actively Serving: my-mac (:3002) • Standby: container-of-souls (:3002)'
+      traffic_route: 'Actively Serving: my-mac (:3002) • Standby: container-of-souls (:3002)',
+      cpu_usage: '0.3% avg',
+      ram_usage: '24 MB',
+      storage_usage: '62 MB'
     },
     {
       id: 'cockpit',
@@ -80,7 +83,10 @@ export default function Admin({ onExit }) {
       status: 'running',
       type: 'systemctl',
       serving_state: 'both',
-      traffic_route: 'Multi-Host Console: my-mac & container-of-souls (:9090)'
+      traffic_route: 'Multi-Host Console: my-mac & container-of-souls (:9090)',
+      cpu_usage: '0.3% avg',
+      ram_usage: '32 MB',
+      storage_usage: '85 MB'
     },
     {
       id: 'nginx',
@@ -90,7 +96,10 @@ export default function Admin({ onExit }) {
       status: 'running',
       type: 'systemctl',
       serving_state: 'active',
-      traffic_route: 'Public Edge Ingress (Ports 80 & 443 SSL) on my-mac'
+      traffic_route: 'Public Edge Ingress (Ports 80 & 443 SSL) on my-mac',
+      cpu_usage: '0.4% avg',
+      ram_usage: '18 MB',
+      storage_usage: '45 MB'
     },
     {
       id: 'macos-server-blue',
@@ -100,7 +109,10 @@ export default function Admin({ onExit }) {
       status: 'running',
       type: 'docker',
       serving_state: 'active',
-      traffic_route: 'Actively Serving: mac.faizal.uk -> my-mac (:3001 Active Slot)'
+      traffic_route: 'Actively Serving: mac.faizal.uk -> my-mac (:3001 Active Slot)',
+      cpu_usage: '2.4% avg',
+      ram_usage: '180 MB',
+      storage_usage: '520 MB'
     },
     {
       id: 'stalwart-mail',
@@ -110,7 +122,10 @@ export default function Admin({ onExit }) {
       status: 'running',
       type: 'docker',
       serving_state: 'active',
-      traffic_route: 'Actively Serving: Primary Mail Host (MX & Webmail :8080)'
+      traffic_route: 'Actively Serving: Primary Mail Host (MX & Webmail :8080)',
+      cpu_usage: '1.2% avg',
+      ram_usage: '95 MB',
+      storage_usage: '280 MB'
     },
     {
       id: 'cs-panel',
@@ -120,7 +135,10 @@ export default function Admin({ onExit }) {
       status: 'stopped',
       type: 'systemctl',
       serving_state: 'idle',
-      traffic_route: 'cs.faizal.uk (Port 3005) - On-Demand Game Engine'
+      traffic_route: 'cs.faizal.uk (Port 3005) - On-Demand Game Engine',
+      cpu_usage: '0.0%',
+      ram_usage: '0 MB',
+      storage_usage: '1.1 GB'
     },
     {
       id: 'nexus-backend',
@@ -130,7 +148,10 @@ export default function Admin({ onExit }) {
       status: 'stopped',
       type: 'systemctl',
       serving_state: 'idle',
-      traffic_route: 'Internal App API (Port 3010) on my-mac'
+      traffic_route: 'Internal App API (Port 3010) on my-mac',
+      cpu_usage: '0.0%',
+      ram_usage: '0 MB',
+      storage_usage: '110 MB'
     },
     {
       id: 'bloomberg-terminal',
@@ -140,7 +161,10 @@ export default function Admin({ onExit }) {
       status: 'running',
       type: 'docker',
       serving_state: 'active',
-      traffic_route: 'Actively Serving: bloom.faizal.uk on container-of-souls'
+      traffic_route: 'Actively Serving: bloom.faizal.uk on container-of-souls',
+      cpu_usage: '1.6% avg',
+      ram_usage: '90 MB',
+      storage_usage: '340 MB'
     },
     {
       id: 'macos-server-green',
@@ -150,7 +174,10 @@ export default function Admin({ onExit }) {
       status: 'running',
       type: 'docker',
       serving_state: 'standby',
-      traffic_route: 'Hot Standby Slot: container-of-souls (:3004 Failover Target)'
+      traffic_route: 'Hot Standby Slot: container-of-souls (:3004 Failover Target)',
+      cpu_usage: '0.5% avg',
+      ram_usage: '140 MB',
+      storage_usage: '520 MB'
     },
     {
       id: 'mc-manager',
@@ -160,7 +187,10 @@ export default function Admin({ onExit }) {
       status: 'stopped',
       type: 'systemctl',
       serving_state: 'idle',
-      traffic_route: 'mine.faizal.uk (Port 5000 / 19132) on container-of-souls'
+      traffic_route: 'mine.faizal.uk (Port 5000 / 19132) on container-of-souls',
+      cpu_usage: '0.0%',
+      ram_usage: '0 MB',
+      storage_usage: '1.8 GB'
     }
   ]);
 
