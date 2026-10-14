@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { RotateCcw, Square, Play, Layers, Cpu } from 'lucide-react';
+import { RotateCcw, Square, Play, Layers, Cpu, Radio, ShieldCheck, Zap, Globe, ArrowRightLeft } from 'lucide-react';
 
 export default function ServiceCard({ service, onAction }) {
   const [loadingAction, setLoadingAction] = useState(null);
@@ -16,23 +16,43 @@ export default function ServiceCard({ service, onAction }) {
 
   const isRunning = service.status === 'running' || service.status === 'online';
 
+  // Determine serving state
+  const servingState = service.serving_state || (
+    service.id === 'macos-server-green' ? 'standby' :
+    (service.node === 'both' || service.id === 'personal-site-rust' || service.id === 'cockpit') ? 'both' :
+    isRunning ? 'active' : 'idle'
+  );
+
+  const isActivelyServing = servingState === 'active' && isRunning;
+  const isStandby = servingState === 'standby';
+  const isBothCluster = servingState === 'both';
+
   return (
     <motion.div
       whileHover={{ y: -2 }}
       className="rounded-2xl border flex flex-col justify-between transition-all"
       style={{
-        padding: '24px',
-        minHeight: '210px',
+        padding: '22px',
+        minHeight: '230px',
         backgroundColor: 'rgba(18, 19, 22, 0.85)',
-        borderColor: 'rgba(255, 255, 255, 0.09)',
+        borderColor: isActivelyServing
+          ? 'rgba(137, 255, 0, 0.22)'
+          : isBothCluster
+          ? 'rgba(168, 85, 247, 0.25)'
+          : isStandby
+          ? 'rgba(56, 189, 248, 0.22)'
+          : 'rgba(255, 255, 255, 0.08)',
         backdropFilter: 'blur(20px)',
         WebkitBackdropFilter: 'blur(20px)',
-        boxShadow: '0 8px 32px 0 rgba(0, 0, 0, 0.45)',
+        boxShadow: isActivelyServing
+          ? '0 8px 32px 0 rgba(0, 0, 0, 0.45), 0 0 15px -4px rgba(137, 255, 0, 0.15)'
+          : '0 8px 32px 0 rgba(0, 0, 0, 0.45)',
         boxSizing: 'border-box'
       }}
     >
       <div>
-        <div className="flex items-start justify-between gap-3 mb-4">
+        {/* Top Header: Icon + Title + Serving Badge */}
+        <div className="flex items-start justify-between gap-3 mb-3">
           <div className="flex items-center gap-3 min-w-0">
             <div
               className="p-2.5 rounded-xl shrink-0"
@@ -42,9 +62,9 @@ export default function ServiceCard({ service, onAction }) {
               }}
             >
               {service.type === 'docker' ? (
-                <Layers className="w-4 h-4 text-sky-400" />
+                <Layers className={`w-4 h-4 ${isActivelyServing ? 'text-[#89ff00]' : isBothCluster ? 'text-purple-400' : 'text-sky-400'}`} />
               ) : (
-                <Cpu className="w-4 h-4 text-neutral-400" />
+                <Cpu className={`w-4 h-4 ${isActivelyServing ? 'text-[#89ff00]' : 'text-neutral-400'}`} />
               )}
             </div>
             <div className="min-w-0">
@@ -57,26 +77,98 @@ export default function ServiceCard({ service, onAction }) {
             </div>
           </div>
 
-          {/* Status Indicator */}
-          <span
-            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-mono font-bold border shrink-0 ${
-              isRunning
-                ? 'text-[#89ff00] bg-[#89ff00]/15 border-[#89ff00]/30'
-                : 'text-[#ff3366] bg-[#ff3366]/15 border-[#ff3366]/30'
+          {/* Actively Serving / Standby Pill */}
+          <div className="shrink-0 flex flex-col items-end gap-1">
+            {isActivelyServing && (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-mono font-bold bg-[#89ff00]/15 text-[#89ff00] border border-[#89ff00]/40 shadow-[0_0_10px_rgba(137,255,0,0.2)]">
+                <span className="w-1.5 h-1.5 rounded-full bg-[#89ff00] animate-pulse" />
+                ACTIVELY SERVING
+              </span>
+            )}
+            {isBothCluster && (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-mono font-bold bg-purple-500/15 text-purple-300 border border-purple-500/40 shadow-[0_0_10px_rgba(168,85,247,0.2)]">
+                <span className="w-1.5 h-1.5 rounded-full bg-purple-400 animate-pulse" />
+                DUAL-NODE ACTIVE
+              </span>
+            )}
+            {isStandby && (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-mono font-bold bg-sky-500/15 text-sky-400 border border-sky-500/40">
+                <span className="w-1.5 h-1.5 rounded-full bg-sky-400" />
+                STANDBY REPLICA
+              </span>
+            )}
+            {!isActivelyServing && !isStandby && !isBothCluster && (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-mono font-medium bg-white/5 text-neutral-400 border border-white/10">
+                <span className="w-1.5 h-1.5 rounded-full bg-neutral-500" />
+                ON-DEMAND (IDLE)
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Traffic Routing & Live Ingress Banner */}
+        <div
+          className="mt-3 px-3 py-2 rounded-xl flex items-center gap-2.5 text-xs font-mono"
+          style={{
+            backgroundColor: isActivelyServing
+              ? 'rgba(137, 255, 0, 0.05)'
+              : isBothCluster
+              ? 'rgba(168, 85, 247, 0.05)'
+              : isStandby
+              ? 'rgba(56, 189, 248, 0.05)'
+              : 'rgba(255, 255, 255, 0.03)',
+            border: isActivelyServing
+              ? '1px solid rgba(137, 255, 0, 0.18)'
+              : isBothCluster
+              ? '1px solid rgba(168, 85, 247, 0.18)'
+              : isStandby
+              ? '1px solid rgba(56, 189, 248, 0.18)'
+              : '1px solid rgba(255, 255, 255, 0.06)'
+          }}
+        >
+          <Radio
+            className={`w-3.5 h-3.5 shrink-0 ${
+              isActivelyServing
+                ? 'text-[#89ff00] animate-pulse'
+                : isBothCluster
+                ? 'text-purple-300 animate-pulse'
+                : isStandby
+                ? 'text-sky-400'
+                : 'text-neutral-500'
             }`}
-          >
-            <span
-              className={`size-1.5 rounded-full ${
-                isRunning ? 'bg-[#89ff00] animate-pulse' : 'bg-[#ff3366]'
-              }`}
-            />
-            {service.status?.toUpperCase() || 'UNKNOWN'}
-          </span>
+          />
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center justify-between gap-1 text-[10px] uppercase font-bold tracking-wider text-neutral-400">
+              <span>
+                {isActivelyServing
+                  ? 'Live Production Traffic'
+                  : isBothCluster
+                  ? 'Active Clustered Edge'
+                  : isStandby
+                  ? 'Failover Hot Replica'
+                  : 'On-Demand Engine'}
+              </span>
+              <span className={`text-[9px] font-mono ${isRunning ? 'text-[#89ff00]' : 'text-neutral-400'}`}>
+                {isRunning ? 'RUNNING' : 'STOPPED'}
+              </span>
+            </div>
+            <div className="text-xs text-white truncate font-medium mt-0.5">
+              {service.traffic_route || (
+                isBothCluster
+                  ? 'Actively Serving: my-mac (:3002) • Standby: container-of-souls (:3002)'
+                  : isStandby
+                  ? `Hot failover target on ${service.node}`
+                  : isActivelyServing
+                  ? `Live traffic on ${service.node}`
+                  : `On-demand service on ${service.node}`
+              )}
+            </div>
+          </div>
         </div>
 
         {/* Metadata Tags */}
         <div
-          className="flex flex-wrap items-center gap-2 mt-4 pt-3.5 text-xs font-mono"
+          className="flex flex-wrap items-center gap-2 mt-3.5 pt-3 text-xs font-mono"
           style={{ borderTop: '1px solid rgba(255, 255, 255, 0.06)' }}
         >
           <span
@@ -113,7 +205,7 @@ export default function ServiceCard({ service, onAction }) {
 
       {/* Action Controls */}
       <div
-        className="flex items-center gap-2 mt-5 pt-3.5"
+        className="flex items-center gap-2 mt-4 pt-3"
         style={{ borderTop: '1px solid rgba(255, 255, 255, 0.06)' }}
       >
         <button

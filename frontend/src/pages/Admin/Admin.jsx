@@ -62,16 +62,106 @@ export default function Admin({ onExit }) {
 
   // Services State
   const [services, setServices] = useState([
-    { id: 'personal-site-rust', name: 'Faizal.uk Web Engine (Rust)', node: 'both', port: 3002, status: 'running', type: 'docker' },
-    { id: 'cockpit', name: 'Cockpit Multi-Host Bridge', node: 'both', port: 9090, status: 'running', type: 'systemctl' },
-    { id: 'nginx', name: 'Nginx SSL Reverse Proxy', node: 'my-mac', port: 80, status: 'running', type: 'systemctl' },
-    { id: 'macos-server-blue', name: 'MacOS Server Web Desktop (Blue)', node: 'my-mac', port: 3001, status: 'running', type: 'docker' },
-    { id: 'stalwart-mail', name: 'Stalwart Mail & JMAP Server', node: 'my-mac', port: 25, status: 'running', type: 'docker' },
-    { id: 'cs-panel', name: 'Counter-Strike 1.6 Panel', node: 'my-mac', port: 3005, status: 'stopped', type: 'systemctl' },
-    { id: 'nexus-backend', name: 'Nexus Backend API', node: 'my-mac', port: 3010, status: 'stopped', type: 'systemctl' },
-    { id: 'bloomberg-terminal', name: 'Bloomberg Market Terminal', node: 'container-of-souls', port: 443, status: 'running', type: 'docker' },
-    { id: 'macos-server-green', name: 'MacOS Server Web Desktop (Green Standby)', node: 'container-of-souls', port: 3004, status: 'running', type: 'docker' },
-    { id: 'mc-manager', name: 'Minecraft Bedrock Manager', node: 'container-of-souls', port: 5000, status: 'stopped', type: 'systemctl' }
+    {
+      id: 'personal-site-rust',
+      name: 'Faizal.uk Web Engine (Rust)',
+      node: 'both',
+      port: 3002,
+      status: 'running',
+      type: 'docker',
+      serving_state: 'both',
+      traffic_route: 'Actively Serving: my-mac (:3002) • Standby: container-of-souls (:3002)'
+    },
+    {
+      id: 'cockpit',
+      name: 'Cockpit Multi-Host Bridge',
+      node: 'both',
+      port: 9090,
+      status: 'running',
+      type: 'systemctl',
+      serving_state: 'both',
+      traffic_route: 'Multi-Host Console: my-mac & container-of-souls (:9090)'
+    },
+    {
+      id: 'nginx',
+      name: 'Nginx SSL Reverse Proxy',
+      node: 'my-mac',
+      port: 80,
+      status: 'running',
+      type: 'systemctl',
+      serving_state: 'active',
+      traffic_route: 'Public Edge Ingress (Ports 80 & 443 SSL) on my-mac'
+    },
+    {
+      id: 'macos-server-blue',
+      name: 'MacOS Server Web Desktop (Blue)',
+      node: 'my-mac',
+      port: 3001,
+      status: 'running',
+      type: 'docker',
+      serving_state: 'active',
+      traffic_route: 'Actively Serving: mac.faizal.uk -> my-mac (:3001 Active Slot)'
+    },
+    {
+      id: 'stalwart-mail',
+      name: 'Stalwart Mail & JMAP Server',
+      node: 'my-mac',
+      port: 25,
+      status: 'running',
+      type: 'docker',
+      serving_state: 'active',
+      traffic_route: 'Actively Serving: Primary Mail Host (MX & Webmail :8080)'
+    },
+    {
+      id: 'cs-panel',
+      name: 'Counter-Strike 1.6 Panel',
+      node: 'my-mac',
+      port: 3005,
+      status: 'stopped',
+      type: 'systemctl',
+      serving_state: 'idle',
+      traffic_route: 'cs.faizal.uk (Port 3005) - On-Demand Game Engine'
+    },
+    {
+      id: 'nexus-backend',
+      name: 'Nexus Backend API',
+      node: 'my-mac',
+      port: 3010,
+      status: 'stopped',
+      type: 'systemctl',
+      serving_state: 'idle',
+      traffic_route: 'Internal App API (Port 3010) on my-mac'
+    },
+    {
+      id: 'bloomberg-terminal',
+      name: 'Bloomberg Market Terminal',
+      node: 'container-of-souls',
+      port: 443,
+      status: 'running',
+      type: 'docker',
+      serving_state: 'active',
+      traffic_route: 'Actively Serving: bloom.faizal.uk on container-of-souls'
+    },
+    {
+      id: 'macos-server-green',
+      name: 'MacOS Server Web Desktop (Green Standby)',
+      node: 'container-of-souls',
+      port: 3004,
+      status: 'running',
+      type: 'docker',
+      serving_state: 'standby',
+      traffic_route: 'Hot Standby Slot: container-of-souls (:3004 Failover Target)'
+    },
+    {
+      id: 'mc-manager',
+      name: 'Minecraft Bedrock Manager',
+      node: 'container-of-souls',
+      port: 5000,
+      status: 'stopped',
+      type: 'systemctl',
+      serving_state: 'idle',
+      traffic_route: 'mine.faizal.uk (Port 5000 / 19132) on container-of-souls'
+    }
   ]);
 
   // Messages, Projects, Profile, Security

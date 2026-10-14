@@ -19,6 +19,7 @@ import ServiceCard from '../components/ServiceCard';
 export default function ServicesTab({ services = [], onServiceAction, onRefresh, refreshing }) {
   const [nodeFilter, setNodeFilter] = useState('all'); // 'all' | 'primary' | 'secondary' | 'both'
   const [typeFilter, setTypeFilter] = useState('all'); // 'all' | 'docker' | 'systemctl'
+  const [servingFilter, setServingFilter] = useState('all'); // 'all' | 'serving' | 'standby'
 
   const getNodeCategory = (service) => {
     const node = (service.node || '').toLowerCase();
@@ -27,26 +28,44 @@ export default function ServicesTab({ services = [], onServiceAction, onRefresh,
     return 'primary';
   };
 
-  const matchesType = (s) => {
-    if (typeFilter === 'docker') return s.type === 'docker';
-    if (typeFilter === 'systemctl') return s.type === 'systemctl';
-    return true;
+  const getServingStatus = (service) => {
+    return service.serving_state || (
+      service.id === 'macos-server-green' ? 'standby' :
+      (service.node === 'both' || service.id === 'personal-site-rust' || service.id === 'cockpit') ? 'both' :
+      (service.status === 'running' || service.status === 'online') ? 'active' : 'idle'
+    );
   };
 
   const isOnline = (s) => s.status === 'running' || s.status === 'online';
+  const isActivelyServing = (s) => {
+    const st = getServingStatus(s);
+    return (st === 'active' || st === 'both') && isOnline(s);
+  };
+  const isStandby = (s) => getServingStatus(s) === 'standby';
+
+  const matchesFilter = (s) => {
+    if (typeFilter === 'docker' && s.type !== 'docker') return false;
+    if (typeFilter === 'systemctl' && s.type !== 'systemctl') return false;
+    if (servingFilter === 'serving' && !isActivelyServing(s)) return false;
+    if (servingFilter === 'standby' && !isStandby(s)) return false;
+    return true;
+  };
 
   const primaryServices = services.filter((s) => getNodeCategory(s) === 'primary');
   const secondaryServices = services.filter((s) => getNodeCategory(s) === 'secondary');
   const bothServices = services.filter((s) => getNodeCategory(s) === 'both');
 
-  const visiblePrimary = primaryServices.filter(matchesType);
-  const visibleSecondary = secondaryServices.filter(matchesType);
-  const visibleBoth = bothServices.filter(matchesType);
+  const visiblePrimary = primaryServices.filter(matchesFilter);
+  const visibleSecondary = secondaryServices.filter(matchesFilter);
+  const visibleBoth = bothServices.filter(matchesFilter);
 
   const primaryOnline = primaryServices.filter(isOnline).length;
   const secondaryOnline = secondaryServices.filter(isOnline).length;
   const bothOnline = bothServices.filter(isOnline).length;
   const totalOnline = services.filter(isOnline).length;
+
+  const activeServingCount = services.filter(isActivelyServing).length;
+  const standbyCount = services.filter(isStandby).length;
 
   return (
     <div className="space-y-8" style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
@@ -72,25 +91,51 @@ export default function ServicesTab({ services = [], onServiceAction, onRefresh,
             Container & System Orchestration
           </h2>
           <p className="text-xs sm:text-sm text-neutral-400 mt-1 max-w-2xl leading-relaxed">
-            Structured across 3 environments: <strong className="text-white">Primary VM (my-mac)</strong>,{' '}
-            <strong className="text-white">Secondary VM (container-of-souls)</strong>, and{' '}
-            <strong className="text-white">Dual-Node HA Cluster</strong>.
+            Live telemetry detailing <strong className="text-[#89ff00]">actively serving engines</strong>,{' '}
+            <strong className="text-sky-400">failover standby replicas</strong>, and dual-node cluster fabrics.
           </p>
         </div>
 
-        {/* Global Controls & Metrics */}
-        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
-          {/* Quick cluster health pill */}
+        {/* Global Controls & Traffic Indicators */}
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Actively Serving Pill */}
           <div
-            className="flex items-center gap-2.5 px-4 py-2 rounded-2xl text-xs font-mono"
+            className="flex items-center gap-2 px-3.5 py-2 rounded-2xl text-xs font-mono"
+            style={{
+              backgroundColor: 'rgba(137, 255, 0, 0.08)',
+              border: '1px solid rgba(137, 255, 0, 0.25)'
+            }}
+          >
+            <span className="w-2 h-2 rounded-full bg-[#89ff00] animate-pulse" />
+            <span className="text-neutral-300">
+              <strong className="text-[#89ff00]">{activeServingCount}</strong> Actively Serving
+            </span>
+          </div>
+
+          {/* Standby Replicas Pill */}
+          <div
+            className="flex items-center gap-2 px-3.5 py-2 rounded-2xl text-xs font-mono"
+            style={{
+              backgroundColor: 'rgba(56, 189, 248, 0.08)',
+              border: '1px solid rgba(56, 189, 248, 0.25)'
+            }}
+          >
+            <span className="w-2 h-2 rounded-full bg-sky-400" />
+            <span className="text-neutral-300">
+              <strong className="text-sky-400">{standbyCount}</strong> Standby Replicas
+            </span>
+          </div>
+
+          {/* Total Online Pill */}
+          <div
+            className="flex items-center gap-2 px-3.5 py-2 rounded-2xl text-xs font-mono"
             style={{
               backgroundColor: 'rgba(255, 255, 255, 0.04)',
               border: '1px solid rgba(255, 255, 255, 0.08)'
             }}
           >
-            <span className="w-2 h-2 rounded-full bg-[#89ff00] animate-ping" />
-            <span className="text-neutral-300">
-              <strong className="text-white">{totalOnline}</strong> / {services.length} Total Running
+            <span className="text-neutral-400">
+              Total: <strong className="text-white">{totalOnline}</strong> / {services.length}
             </span>
           </div>
 
@@ -106,9 +151,9 @@ export default function ServicesTab({ services = [], onServiceAction, onRefresh,
         </div>
       </div>
 
-      {/* Segment Navigation & Type Filters */}
+      {/* Segment Navigation & Serving/Type Filters */}
       <div
-        className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-2 rounded-2xl backdrop-blur-xl"
+        className="flex flex-col xl:flex-row xl:items-center justify-between gap-4 p-2 rounded-2xl backdrop-blur-xl"
         style={{
           backgroundColor: 'rgba(18, 19, 22, 0.65)',
           border: '1px solid rgba(255, 255, 255, 0.06)'
@@ -165,38 +210,77 @@ export default function ServicesTab({ services = [], onServiceAction, onRefresh,
           </button>
         </div>
 
-        {/* Engine Type Filter (Docker vs Systemd) */}
-        <div className="flex items-center gap-1 p-1 rounded-xl bg-white/5 border border-white/5 text-xs font-mono shrink-0">
-          <button
-            onClick={() => setTypeFilter('all')}
-            className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
-              typeFilter === 'all'
-                ? 'bg-white/10 text-white font-semibold'
-                : 'text-neutral-400 hover:text-white'
-            }`}
-          >
-            All Types
-          </button>
-          <button
-            onClick={() => setTypeFilter('docker')}
-            className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
-              typeFilter === 'docker'
-                ? 'bg-sky-500/20 text-sky-400 font-semibold'
-                : 'text-neutral-400 hover:text-white'
-            }`}
-          >
-            Docker
-          </button>
-          <button
-            onClick={() => setTypeFilter('systemctl')}
-            className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
-              typeFilter === 'systemctl'
-                ? 'bg-[#89ff00]/20 text-[#89ff00] font-semibold'
-                : 'text-neutral-400 hover:text-white'
-            }`}
-          >
-            Systemd
-          </button>
+        {/* Serving State & Engine Filters */}
+        <div className="flex items-center gap-2.5 flex-wrap shrink-0">
+          {/* Serving Filter */}
+          <div className="flex items-center p-1 rounded-xl bg-white/5 border border-white/5 text-xs font-mono">
+            <button
+              onClick={() => setServingFilter('all')}
+              className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
+                servingFilter === 'all'
+                  ? 'bg-white/10 text-white font-semibold'
+                  : 'text-neutral-400 hover:text-white'
+              }`}
+            >
+              All Statuses
+            </button>
+            <button
+              onClick={() => setServingFilter('serving')}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
+                servingFilter === 'serving'
+                  ? 'bg-[#89ff00]/20 text-[#89ff00] font-bold'
+                  : 'text-neutral-400 hover:text-[#89ff00]'
+              }`}
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-[#89ff00] animate-pulse" />
+              <span>Serving ({activeServingCount})</span>
+            </button>
+            <button
+              onClick={() => setServingFilter('standby')}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
+                servingFilter === 'standby'
+                  ? 'bg-sky-500/20 text-sky-400 font-bold'
+                  : 'text-neutral-400 hover:text-sky-400'
+              }`}
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-sky-400" />
+              <span>Standby ({standbyCount})</span>
+            </button>
+          </div>
+
+          {/* Engine Type Filter */}
+          <div className="flex items-center p-1 rounded-xl bg-white/5 border border-white/5 text-xs font-mono">
+            <button
+              onClick={() => setTypeFilter('all')}
+              className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
+                typeFilter === 'all'
+                  ? 'bg-white/10 text-white font-semibold'
+                  : 'text-neutral-400 hover:text-white'
+              }`}
+            >
+              All Types
+            </button>
+            <button
+              onClick={() => setTypeFilter('docker')}
+              className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
+                typeFilter === 'docker'
+                  ? 'bg-sky-500/20 text-sky-400 font-semibold'
+                  : 'text-neutral-400 hover:text-white'
+              }`}
+            >
+              Docker
+            </button>
+            <button
+              onClick={() => setTypeFilter('systemctl')}
+              className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
+                typeFilter === 'systemctl'
+                  ? 'bg-[#89ff00]/20 text-[#89ff00] font-semibold'
+                  : 'text-neutral-400 hover:text-white'
+              }`}
+            >
+              Systemd
+            </button>
+          </div>
         </div>
       </div>
 
@@ -251,7 +335,7 @@ export default function ServicesTab({ services = [], onServiceAction, onRefresh,
             </div>
           ) : (
             <div className="p-8 text-center rounded-2xl bg-white/[0.02] border border-white/5 text-neutral-400 text-xs font-mono">
-              No matching services on Primary VM for type filter "{typeFilter}".
+              No matching services on Primary VM for active filters.
             </div>
           )}
         </section>
@@ -294,7 +378,7 @@ export default function ServicesTab({ services = [], onServiceAction, onRefresh,
 
             <div className="flex items-center gap-2 self-start sm:self-center shrink-0">
               <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-mono font-bold bg-sky-500/10 text-sky-400 border border-sky-500/25">
-                <span className="w-1.5 h-1.5 rounded-full bg-sky-400 animate-pulse" />
+                <span className="w-1.5 h-1.5 rounded-full bg-sky-400" />
                 {secondaryOnline} of {secondaryServices.length} Active
               </span>
             </div>
@@ -308,7 +392,7 @@ export default function ServicesTab({ services = [], onServiceAction, onRefresh,
             </div>
           ) : (
             <div className="p-8 text-center rounded-2xl bg-white/[0.02] border border-white/5 text-neutral-400 text-xs font-mono">
-              No matching services on Secondary VM for type filter "{typeFilter}".
+              No matching services on Secondary VM for active filters.
             </div>
           )}
         </section>
@@ -365,7 +449,7 @@ export default function ServicesTab({ services = [], onServiceAction, onRefresh,
             </div>
           ) : (
             <div className="p-8 text-center rounded-2xl bg-white/[0.02] border border-white/5 text-neutral-400 text-xs font-mono">
-              No matching cluster services for type filter "{typeFilter}".
+              No matching cluster services for active filters.
             </div>
           )}
         </section>

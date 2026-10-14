@@ -26,6 +26,8 @@ pub struct ServiceInfo {
     pub enabled: bool,
     pub port: u16,
     pub memory_mb: f64,
+    pub serving_state: String,
+    pub traffic_route: String,
 }
 
 #[derive(Deserialize)]
@@ -126,6 +128,8 @@ pub async fn list_services(State(_state): State<SharedState>) -> impl IntoRespon
             enabled: true,
             port: 80,
             memory_mb: 0.0,
+            serving_state: "active".into(),
+            traffic_route: "Public Edge Ingress (Ports 80 & 443 SSL) on my-mac".into(),
         },
         ServiceInfo {
             id: "personal-site-rust".into(),
@@ -140,6 +144,8 @@ pub async fn list_services(State(_state): State<SharedState>) -> impl IntoRespon
             enabled: true,
             port: 3002,
             memory_mb: 0.0,
+            serving_state: "both".into(),
+            traffic_route: "Actively Serving: my-mac (:3002) • Standby Replica: container-of-souls (:3002)".into(),
         },
         ServiceInfo {
             id: "cockpit".into(),
@@ -154,6 +160,8 @@ pub async fn list_services(State(_state): State<SharedState>) -> impl IntoRespon
             enabled: true,
             port: 9090,
             memory_mb: 0.0,
+            serving_state: "both".into(),
+            traffic_route: "Multi-Host Console: my-mac & container-of-souls (:9090)".into(),
         },
         ServiceInfo {
             id: "macos-server-blue".into(),
@@ -168,6 +176,8 @@ pub async fn list_services(State(_state): State<SharedState>) -> impl IntoRespon
             enabled: true,
             port: 3001,
             memory_mb: 0.0,
+            serving_state: if macos_running { "active".into() } else { "stopped".into() },
+            traffic_route: "Actively Serving: mac.faizal.uk -> my-mac (:3001 Active Slot)".into(),
         },
         ServiceInfo {
             id: "macos-server-green".into(),
@@ -182,6 +192,8 @@ pub async fn list_services(State(_state): State<SharedState>) -> impl IntoRespon
             enabled: true,
             port: 3004,
             memory_mb: 0.0,
+            serving_state: "standby".into(),
+            traffic_route: "Hot Standby Slot: container-of-souls (:3004 Failover Target)".into(),
         },
         // ── Stalwart Mail (all under one Docker container) ───────────────────
         ServiceInfo {
@@ -197,6 +209,8 @@ pub async fn list_services(State(_state): State<SharedState>) -> impl IntoRespon
             enabled: true,
             port: 8080,
             memory_mb: 0.0,
+            serving_state: if stall_running { "active".into() } else { "stopped".into() },
+            traffic_route: "Actively Serving: Primary Mail Host (MX & Webmail :8080) on my-mac".into(),
         },
         ServiceInfo {
             id: "stalwart-smtps".into(),
@@ -211,6 +225,8 @@ pub async fn list_services(State(_state): State<SharedState>) -> impl IntoRespon
             enabled: stall_smtps,
             port: 465,
             memory_mb: 0.0,
+            serving_state: if stall_smtps { "active".into() } else { "stopped".into() },
+            traffic_route: "Actively Serving: Outbound Submission (Ports 465/587) on my-mac".into(),
         },
         ServiceInfo {
             id: "stalwart-imap".into(),
@@ -225,6 +241,8 @@ pub async fn list_services(State(_state): State<SharedState>) -> impl IntoRespon
             enabled: stall_imap,
             port: 993,
             memory_mb: 0.0,
+            serving_state: if stall_imap { "active".into() } else { "stopped".into() },
+            traffic_route: "Actively Serving: Inbound IMAPS (Port 993) on my-mac".into(),
         },
         // ── Game Engines (on-demand) ─────────────────────────────────────────
         ServiceInfo {
@@ -240,6 +258,8 @@ pub async fn list_services(State(_state): State<SharedState>) -> impl IntoRespon
             enabled: false,
             port: 3005,
             memory_mb: if cs_online { 24.0 } else { 0.0 },
+            serving_state: if cs_online { "active".into() } else { "idle".into() },
+            traffic_route: "cs.faizal.uk (Port 3005) - On-Demand Game Engine".into(),
         },
         ServiceInfo {
             id: "mc-manager".into(),
@@ -254,6 +274,8 @@ pub async fn list_services(State(_state): State<SharedState>) -> impl IntoRespon
             enabled: false,
             port: 5000,
             memory_mb: if mc_online { 32.0 } else { 0.0 },
+            serving_state: if mc_online { "active".into() } else { "idle".into() },
+            traffic_route: "mine.faizal.uk (Port 5000 / 19132) on container-of-souls".into(),
         },
         // ── Core application backends ───────────────────────────────────────
         ServiceInfo {
@@ -269,6 +291,8 @@ pub async fn list_services(State(_state): State<SharedState>) -> impl IntoRespon
             enabled: false,
             port: 3010,
             memory_mb: 0.0,
+            serving_state: if nexus_online { "active".into() } else { "idle".into() },
+            traffic_route: "Internal App API (Port 3010) on my-mac".into(),
         },
         ServiceInfo {
             id: "bloomberg-terminal".into(),
@@ -283,6 +307,8 @@ pub async fn list_services(State(_state): State<SharedState>) -> impl IntoRespon
             enabled: true,
             port: 443,
             memory_mb: 0.0,
+            serving_state: if bloomberg_status == "running" { "active".into() } else { "idle".into() },
+            traffic_route: "bloom.faizal.uk (Port 443) on container-of-souls".into(),
         },
     ];
 
