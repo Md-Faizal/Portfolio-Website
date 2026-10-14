@@ -132,17 +132,81 @@ jobs:
           echo "🐳 Rebuilding and launching production Docker container..."
           ssh production bash -s << 'REMOTESCRIPT'
           set -e
+          mkdir -p /home/ubuntu/stack/apps/personal-site/backend
+          mkdir -p /home/ubuntu/stack/ops/ipc
           cd /home/ubuntu/stack/apps/personal-site
 
-          # Ensure the slave probe SSH tunnel is active
+          # Ensure the standby probe SSH tunnel is active
           systemctl is-active --quiet cos-tunnel.service || sudo systemctl restart cos-tunnel.service || true
 
-          # Build and start container
-          docker compose up -d --build --remove-orphans
+          # Build and start container (Primary role)
+          NODE_ROLE=primary docker compose up -d --build --remove-orphans
 
           # Verify container health
           sleep 5
           docker ps --filter "name=personal-site-rust"
           curl -sS http://127.0.0.1:3002/api/maintenance-status || exit 1
-          echo "✅ Production personal-site-rust container is healthy and serving requests!"
+          echo "✅ Primary personal-site-rust container on my-mac is healthy and serving requests!"
+          REMOTESCRIPT
+
+      - name: 🛰️ Setup SSH & Deploy to Standby VM (container-of-souls)
+        if: github.event.inputs.dry_run != 'true' && secrets.COS_SSH_HOST != '' && secrets.COS_SSH_KEY != ''
+        env:
+          COS_SSH_HOST: ${{ secrets.COS_SSH_HOST }}
+          COS_SSH_USER: ${{ secrets.COS_SSH_USER || 'ubuntu' }}
+          COS_SSH_KEY: ${{ secrets.COS_SSH_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+
+          if echo "$COS_SSH_KEY" | grep -q "^LS0t"; then
+            echo "$COS_SSH_KEY" | base64 -d > ~/.ssh/cos_deploy_key
+          elif echo "$COS_SSH_KEY" | grep -q "BEGIN"; then
+            echo "$COS_SSH_KEY" | tr -d '\r' > ~/.ssh/cos_deploy_key
+          else
+            echo "$COS_SSH_KEY" | base64 -d > ~/.ssh/cos_deploy_key 2>/dev/null || echo "$COS_SSH_KEY" > ~/.ssh/cos_deploy_key
+          fi
+          chmod 600 ~/.ssh/cos_deploy_key
+
+          cat << 'EOF' >> ~/.ssh/config
+          Host standby-cos
+            HostName ${{ secrets.COS_SSH_HOST }}
+            User ${{ secrets.COS_SSH_USER || 'ubuntu' }}
+            IdentityFile ~/.ssh/cos_deploy_key
+            Port 22
+            StrictHostKeyChecking no
+            UserKnownHostsFile /dev/null
+            ServerAliveInterval 30
+            ServerAliveCountMax 3
+          EOF
+          chmod 600 ~/.ssh/config
+
+          TARGET_DIR="/home/ubuntu/stack/apps/personal-site"
+
+          echo "🚀 Deploying to Standby Node (cos) at $TARGET_DIR..."
+          ssh standby-cos "mkdir -p $TARGET_DIR/backend /home/ubuntu/stack/ops/ipc $TARGET_DIR/public"
+
+          # Upload binary, configs, and frontend
+          scp ./personal-site-rust standby-cos:$TARGET_DIR/personal-site-rust
+          scp ./Dockerfile ./docker-compose.yml standby-cos:$TARGET_DIR/
+
+          rsync -avz --delete frontend/dist/ standby-cos:$TARGET_DIR/frontend/dist/
+          rsync -avz public/ standby-cos:$TARGET_DIR/public/
+
+          echo "🐳 Launching standby Docker container on cos..."
+          ssh standby-cos bash -s << 'REMOTESCRIPT'
+          set -e
+          cd /home/ubuntu/stack/apps/personal-site
+
+          # Ensure messages.db exists so docker bind-mount doesn't create it as a directory
+          touch /home/ubuntu/stack/apps/personal-site/backend/messages.db
+
+          # Deploy in Standby mode
+          NODE_ROLE=standby docker compose up -d --build --remove-orphans
+
+          # Verify container health
+          sleep 5
+          docker ps --filter "name=personal-site-rust"
+          curl -sS http://127.0.0.1:3002/api/maintenance-status || exit 1
+          echo "✅ Standby personal-site-rust container on cos is healthy and ready!"
           REMOTESCRIPT

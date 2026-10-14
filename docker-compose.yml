@@ -14,6 +14,7 @@ services:
       - ADMIN_PIN=2004
       - RUST_LOG=info
       - TZ=UTC
+      - NODE_ROLE=${NODE_ROLE:-primary}
       # ── SMTP via Brevo Relay (port 587 STARTTLS, bypasses OCI port 25 block) ─
       - SMTP_HOST=smtp-relay.brevo.com
       - SMTP_PORT=587
