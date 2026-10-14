@@ -150,12 +150,17 @@ jobs:
           REMOTESCRIPT
 
       - name: 🛰️ Setup SSH & Deploy to Standby VM (container-of-souls)
-        if: github.event.inputs.dry_run != 'true' && secrets.COS_SSH_HOST != '' && secrets.COS_SSH_KEY != ''
+        if: github.event.inputs.dry_run != 'true'
         env:
           COS_SSH_HOST: ${{ secrets.COS_SSH_HOST }}
           COS_SSH_USER: ${{ secrets.COS_SSH_USER || 'ubuntu' }}
           COS_SSH_KEY: ${{ secrets.COS_SSH_KEY }}
         run: |
+          if [ -z "$COS_SSH_HOST" ] || [ -z "$COS_SSH_KEY" ]; then
+            echo "ℹ️ Standby VM (cos) secrets not configured; skipping standby deployment."
+            exit 0
+          fi
+
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
 
