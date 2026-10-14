@@ -161,15 +161,13 @@ jobs:
           name: backend-binary
           path: .
 
-      - name: "📦 Package Compressed Swarm Release Bundle"
+      - name: "🔧 Prepare Binary & Web Assets Permissions"
         run: |
           chmod +x ./personal-site-rust
           chmod -R a+rX public frontend/dist
-          # Package everything into a single compressed bundle for sub-second WAN transfer
-          tar -czf release.tar.gz personal-site-rust Dockerfile docker-compose.yml frontend/dist public
-          ls -lh release.tar.gz
+          ls -lh ./personal-site-rust
 
-      - name: "🔌 Deploy Primary (my-mac) & Propagate to Standby (cos)"
+      - name: "🔌 Setup SSH & Deploy to Ubuntu VM"
         env:
           SSH_HOST: ${{ secrets.SSH_HOST }}
           SSH_USER: ${{ secrets.SSH_USER }}
@@ -177,9 +175,11 @@ jobs:
         run: |
           set -euo pipefail
 
+          # 1. Setup SSH
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
 
+          # Decode Base64 or raw key
           if echo "$SSH_KEY" | grep -q "^LS0t"; then
             echo "$SSH_KEY" | base64 -d > ~/.ssh/deploy_key
           elif echo "$SSH_KEY" | grep -q "BEGIN"; then
@@ -199,35 +199,36 @@ jobs:
             UserKnownHostsFile /dev/null
             PubkeyAcceptedKeyTypes +ssh-rsa,rsa-sha2-256,rsa-sha2-512
             HostkeyAlgorithms +ssh-rsa,rsa-sha2-256,rsa-sha2-512
-            ServerAliveInterval 15
-            ServerAliveCountMax 4
-            ConnectTimeout 30
-            IPQoS cs0 cs0
-            TCPKeepAlive yes
+            ServerAliveInterval 30
+            ServerAliveCountMax 3
           EOF
           chmod 600 ~/.ssh/config
 
           TARGET_DIR="/home/ubuntu/stack/apps/personal-site"
+          TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
 
-          echo "⚡ Step 1: Fast-Streaming release bundle to Primary Node ($TARGET_DIR)..."
-          ssh -n production "mkdir -p $TARGET_DIR/backend /home/ubuntu/stack/ops/ipc $TARGET_DIR/public $TARGET_DIR/frontend/dist && rm -f $TARGET_DIR/release.tar.gz.tmp"
+          echo "======================================================"
+          echo "🚀 Primary Host Deployment: $SSH_USER@$SSH_HOST"
+          echo "   Target Dir: $TARGET_DIR"
+          echo "   Timestamp : $TIMESTAMP"
+          echo "======================================================"
 
-          # Transfer single compressed archive via rsync (prevents OpenSSH 9 SFTP/legacy SCP buffer stalls and DSCP drops)
-          if command -v rsync >/dev/null 2>&1; then
-            rsync -av --timeout=45 release.tar.gz production:$TARGET_DIR/release.tar.gz
-          else
-            scp -o ConnectTimeout=30 release.tar.gz production:$TARGET_DIR/release.tar.gz
-          fi
+          # Step 1: Pre-flight remote directory structure
+          echo "🛡️ Step 1: Ensuring remote directory structure & permissions..."
+          ssh production "mkdir -p $TARGET_DIR/backend /home/ubuntu/stack/ops/ipc $TARGET_DIR/public $TARGET_DIR/frontend/dist"
 
-          echo "🐳 Step 2: Unpacking bundle & launching Primary container on my-mac..."
-          ssh -n production bash -s << 'REMOTESCRIPT'
+          # Step 2: Sync files via rsync (identical battle-tested delta transfer as MacOS & Bloomberg)
+          echo "📦 Step 2: Syncing binary, configs, and web assets via rsync..."
+          rsync -avz personal-site-rust Dockerfile docker-compose.yml production:"$TARGET_DIR/"
+          rsync -avz --delete frontend/dist/ production:"$TARGET_DIR/frontend/dist/"
+          rsync -avz --delete public/ production:"$TARGET_DIR/public/"
+
+          # Step 3: Launch container on Primary Node (my-mac) & propagate to Standby (cos)
+          echo "🐳 Step 3: Launching Primary container on my-mac & propagating to cos..."
+          ssh production bash -s << 'REMOTESCRIPT'
           set -e
           TARGET_DIR="/home/ubuntu/stack/apps/personal-site"
           cd "$TARGET_DIR"
-
-          # Atomic unpack
-          tar -xzf release.tar.gz
-          rm -f release.tar.gz
 
           # Ensure public web assets are world-readable and directories traversable for Nginx (www-data)
           chmod -R a+rX "$TARGET_DIR/public" "$TARGET_DIR/frontend/dist" 2>/dev/null || true
@@ -245,14 +246,12 @@ jobs:
           curl -sS http://127.0.0.1:3002/api/maintenance-status || exit 1
           echo "✅ Primary personal-site-rust container on my-mac is healthy and serving requests!"
 
-          # Step 3: Propagate to Standby Node (cos @ 10.0.0.195) via high-speed internal Oracle VCN
-          echo "🛰️ Step 3: Propagating release to Standby Node (cos @ 10.0.0.195)..."
+          # Propagate to Standby Node (cos @ 10.0.0.195) via high-speed internal Oracle VCN
+          echo "🛰️ Propagating release to Standby Node (cos @ 10.0.0.195)..."
           if [ -f "/home/ubuntu/.ssh/cockpit-container-of-souls" ]; then
-            # Atomic binary sync to prevent ETXTBSY or corrupt section headers
             scp -o StrictHostKeyChecking=no -i /home/ubuntu/.ssh/cockpit-container-of-souls \
               "$TARGET_DIR/personal-site-rust" ubuntu@10.0.0.195:"$TARGET_DIR/personal-site-rust.tmp"
 
-            # Sync configs and assets with directory-time safety
             rsync -rlptD --omit-dir-times --no-o --no-g \
               -e "ssh -i /home/ubuntu/.ssh/cockpit-container-of-souls -o StrictHostKeyChecking=no" \
               --exclude "mail" \
@@ -266,7 +265,6 @@ jobs:
               --exclude "personal-site-rust*" \
               "$TARGET_DIR/" ubuntu@10.0.0.195:"$TARGET_DIR/"
 
-            # Atomically swap binary and deploy standby container on cos
             ssh -o StrictHostKeyChecking=no -i /home/ubuntu/.ssh/cockpit-container-of-souls ubuntu@10.0.0.195 bash -s << 'COS_DEPLOY'
             set -e
             TARGET_DIR="/home/ubuntu/stack/apps/personal-site"
@@ -286,3 +284,28 @@ jobs:
             echo "⚠️ Standby key /home/ubuntu/.ssh/cockpit-container-of-souls not found; skipping standby sync."
           fi
           REMOTESCRIPT
+
+      - name: "✅ Smoke Test — faizal.uk"
+        if: github.event.inputs.dry_run != 'true'
+        run: |
+          echo "⏳ Verifying live production endpoint..."
+          SUCCESS=false
+          for i in $(seq 1 15); do
+            HTTP=$(curl -s -o /dev/null -w "%{http_code}" -m 5 "https://faizal.uk/api/maintenance-status" || echo "000")
+            if [ "$HTTP" = "200" ]; then
+              SUCCESS=true
+              echo "✅ faizal.uk is live and healthy (HTTP 200 after ${i}s)!"
+              break
+            fi
+            sleep 1
+          done
+          if [ "$SUCCESS" != "true" ]; then
+            echo "⚠️ Checking root endpoint..."
+            INDEX_HTTP=$(curl -s -o /dev/null -w "%{http_code}" -m 5 "https://faizal.uk/" || echo "000")
+            if [ "$INDEX_HTTP" = "200" ]; then
+              echo "✅ faizal.uk main UI is serving HTTP 200!"
+            else
+              echo "❌ Smoke test FAILED after 15s (status: $HTTP, index: $INDEX_HTTP)"
+              exit 1
+            fi
+          fi
