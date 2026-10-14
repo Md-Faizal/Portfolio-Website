@@ -1,0 +1,53 @@
+# =============================================================================
+# Rust Production Dockerfile — Multi-Stage Build (Self-Contained)
+# Stage 1: Compile from source using official Rust image (glibc)
+# Stage 2: Copy binary into slim Ubuntu 24.04 runtime (matching glibc)
+# No pre-compiled binary needed — always builds from source
+# =============================================================================
+
+# ── Build Stage ──────────────────────────────────────────────────────────────
+FROM rust:1.98-slim-bookworm AS builder
+
+WORKDIR /build
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential pkg-config libssl-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Cache dependencies first
+COPY backend-rust/Cargo.toml backend-rust/Cargo.lock ./
+RUN mkdir src && echo 'fn main(){}' > src/main.rs && cargo build --release --locked --jobs 1
+
+# Copy actual source and build
+COPY backend-rust/src ./src
+
+# Force rebuild of actual binary
+RUN touch src/main.rs && cargo build --release --locked --jobs 1
+
+# ── Runtime Stage ─────────────────────────────────────────────────────────────
+FROM ubuntu:24.04 AS runtime
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates tzdata curl wget \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Copy compiled binary from builder
+COPY --from=builder /build/target/release/personal-site-rust /app/personal-site-rust
+RUN chmod +x /app/personal-site-rust
+
+# Copy static frontend build & public assets
+COPY frontend/dist /app/frontend/dist
+COPY public /app/public
+
+ENV PORT=3002 \
+    RUST_LOG=info \
+    TZ=UTC
+
+EXPOSE 3002
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
+    CMD curl -sf http://127.0.0.1:3002/api/maintenance-status || exit 1
+
+ENTRYPOINT ["/app/personal-site-rust"]

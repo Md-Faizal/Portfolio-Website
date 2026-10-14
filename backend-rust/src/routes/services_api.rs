@@ -1,3 +1,4 @@
+use crate::SharedState;
 use axum::{
     extract::{Path, State},
     response::IntoResponse,
@@ -7,7 +8,6 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::time::Duration;
 use tokio::time::sleep;
-use crate::SharedState;
 
 // ─── Service / Container info ────────────────────────────────────────────────
 
@@ -16,10 +16,13 @@ pub struct ServiceInfo {
     pub id: String,
     pub name: String,
     pub description: String,
-    pub category: String,   // "core" | "mail" | "game"
-    pub group: String,      // display group label
-    pub status: String,     // "running" | "stopped"
+    pub category: String,     // "core" | "mail" | "game"
+    pub group: String,        // display group label
+    pub status: String,       // "running" | "stopped"
     pub control_type: String, // "docker" | "systemctl" | "none"
+    #[serde(rename = "type")]
+    pub service_type: String,
+    pub node: String,
     pub enabled: bool,
     pub port: u16,
     pub memory_mb: f64,
@@ -31,7 +34,9 @@ pub struct ServiceActionPayload {
 }
 
 async fn check_tcp_port(port: u16) -> bool {
-    tokio::net::TcpStream::connect(("127.0.0.1", port)).await.is_ok()
+    tokio::net::TcpStream::connect(("127.0.0.1", port))
+        .await
+        .is_ok()
 }
 
 /// Check if a Docker container is running
@@ -43,9 +48,54 @@ fn docker_running(name: &str) -> bool {
         .unwrap_or(false)
 }
 
-pub async fn list_services(
-    State(_state): State<SharedState>,
-) -> impl IntoResponse {
+async fn bloomberg_terminal_status() -> &'static str {
+    let req_id = format!(
+        "bloomberg-terminal_status_{}",
+        chrono::Utc::now().timestamp_micros()
+    );
+    let req_path = format!("/run/stack-service-ipc/{}.req", req_id);
+    let res_path = format!("/run/stack-service-ipc/{}.res", req_id);
+
+    if let Err(error) = fs::write(&req_path, "remote-docker status bloomberg-terminal\n") {
+        tracing::warn!(%error, "failed to request Bloomberg Terminal status");
+        return "unknown";
+    }
+
+    for _ in 0..10 {
+        sleep(Duration::from_millis(250)).await;
+        match fs::read_to_string(&res_path) {
+            Ok(response) => {
+                let _ = fs::remove_file(&res_path);
+                if response.lines().any(|line| line == "EXIT:0") {
+                    return match response
+                        .lines()
+                        .find_map(|line| line.strip_prefix("OUTPUT:"))
+                    {
+                        Some("RUNNING") => "running",
+                        Some("STOPPED") => "stopped",
+                        _ => {
+                            tracing::warn!(%response, "unexpected Bloomberg Terminal status response");
+                            "unknown"
+                        }
+                    };
+                }
+                tracing::warn!(%response, "Bloomberg Terminal status request failed");
+                return "unknown";
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => {
+                tracing::warn!(%error, "failed to read Bloomberg Terminal status response");
+                return "unknown";
+            }
+        }
+    }
+
+    let _ = fs::remove_file(&req_path);
+    tracing::warn!("timed out requesting Bloomberg Terminal status");
+    "unknown"
+}
+
+pub async fn list_services(State(_state): State<SharedState>) -> impl IntoResponse {
     // Probe ports concurrently
     let (cs_online, mc_online, stall_admin, stall_smtps, stall_imap, nexus_online) = tokio::join!(
         check_tcp_port(3005),
@@ -57,9 +107,10 @@ pub async fn list_services(
     );
 
     // Docker container states
-    let stall_running  = docker_running("stalwart-mail");
-    let macos_running  = docker_running("macos-server-blue");
+    let stall_running = docker_running("stalwart-mail");
+    let macos_running = docker_running("macos-server-blue");
 
+    let bloomberg_status = bloomberg_terminal_status().await;
     let services = vec![
         // ── Core ─────────────────────────────────────────────────────────────
         ServiceInfo {
@@ -70,6 +121,8 @@ pub async fn list_services(
             group: "Core Infrastructure".into(),
             status: "running".into(), // always on, no probe needed
             control_type: "systemctl".into(),
+            service_type: "systemctl".into(),
+            node: "my-mac".into(),
             enabled: true,
             port: 80,
             memory_mb: 0.0,
@@ -82,6 +135,8 @@ pub async fn list_services(
             group: "Core Infrastructure".into(),
             status: "running".into(),
             control_type: "docker".into(),
+            service_type: "docker".into(),
+            node: "my-mac".into(),
             enabled: true,
             port: 3002,
             memory_mb: 0.0,
@@ -94,6 +149,8 @@ pub async fn list_services(
             group: "Core Infrastructure".into(),
             status: if macos_running { "running".into() } else { "stopped".into() },
             control_type: "docker".into(),
+            service_type: "docker".into(),
+            node: "my-mac".into(),
             enabled: true,
             port: 3001,
             memory_mb: 0.0,
@@ -107,6 +164,8 @@ pub async fn list_services(
             group: "Mail Infrastructure".into(),
             status: if stall_running { "running".into() } else { "stopped".into() },
             control_type: "docker".into(),
+            service_type: "docker".into(),
+            node: "my-mac".into(),
             enabled: true,
             port: 8080,
             memory_mb: 0.0,
@@ -119,6 +178,8 @@ pub async fn list_services(
             group: "Mail Infrastructure".into(),
             status: if stall_smtps { "running".into() } else { "stopped".into() },
             control_type: "none".into(),
+            service_type: "none".into(),
+            node: "my-mac".into(),
             enabled: stall_smtps,
             port: 465,
             memory_mb: 0.0,
@@ -131,6 +192,8 @@ pub async fn list_services(
             group: "Mail Infrastructure".into(),
             status: if stall_imap { "running".into() } else { "stopped".into() },
             control_type: "none".into(),
+            service_type: "none".into(),
+            node: "my-mac".into(),
             enabled: stall_imap,
             port: 993,
             memory_mb: 0.0,
@@ -144,6 +207,8 @@ pub async fn list_services(
             group: "On-Demand Game Engines".into(),
             status: if cs_online { "running".into() } else { "stopped".into() },
             control_type: "systemctl".into(),
+            service_type: "systemctl".into(),
+            node: "my-mac".into(),
             enabled: false,
             port: 3005,
             memory_mb: if cs_online { 24.0 } else { 0.0 },
@@ -156,6 +221,8 @@ pub async fn list_services(
             group: "On-Demand Game Engines".into(),
             status: if mc_online { "running".into() } else { "stopped".into() },
             control_type: "systemctl".into(),
+            service_type: "systemctl".into(),
+            node: "my-mac".into(),
             enabled: false,
             port: 5000,
             memory_mb: if mc_online { 32.0 } else { 0.0 },
@@ -169,8 +236,24 @@ pub async fn list_services(
             group: "Core Infrastructure".into(),
             status: if nexus_online { "running".into() } else { "stopped".into() },
             control_type: "systemctl".into(),
+            service_type: "systemctl".into(),
+            node: "my-mac".into(),
             enabled: false,
             port: 3010,
+            memory_mb: 0.0,
+        },
+        ServiceInfo {
+            id: "bloomberg-terminal".into(),
+            name: "Bloomberg Market Terminal".into(),
+            description: "Bloomberg-inspired demo terminal hosted independently on container-of-souls (bloom.faizal.uk)".into(),
+            category: "core".into(),
+            group: "Core Infrastructure".into(),
+            status: bloomberg_status.into(),
+            control_type: "remote-docker".into(),
+            service_type: "docker".into(),
+            node: "container-of-souls".into(),
+            enabled: true,
+            port: 443,
             memory_mb: 0.0,
         },
     ];
@@ -189,14 +272,19 @@ pub async fn control_service(
     let action = payload.action.to_lowercase();
     let valid_action = match action.as_str() {
         "start" | "stop" | "restart" => action.as_str(),
-        _ => return Json(serde_json::json!({ "success": false, "error": "Invalid action (use start, stop, or restart)" })),
+        _ => {
+            return Json(
+                serde_json::json!({ "success": false, "error": "Invalid action (use start, stop, or restart)" }),
+            )
+        }
     };
 
     // Determine control type from service ID
     let control_type = match service_id.as_str() {
         // Docker-controlled containers
         "stalwart-mail" | "macos-server-blue" | "personal-site-rust" => "docker",
-        // Systemctl-controlled services  
+        "bloomberg-terminal" | "bedrock-server" | "minecraft" | "macos-server-green" => "remote-docker",
+        // Systemctl-controlled services
         "cs-panel" | "mc-manager" | "nginx" | "nexus-backend" => "systemctl",
         // Sub-ports: no direct control (controlled via parent container)
         "stalwart-smtps" | "stalwart-imap" | "stalwart-admin" => {
@@ -234,23 +322,17 @@ pub async fn control_service(
     }
 
     match response_text {
-        Some(res) if res.contains("EXIT:0") => {
-            Json(serde_json::json!({
-                "success": true,
-                "message": format!("'{}' {}ed successfully", service_id, valid_action)
-            }))
-        }
-        Some(res) => {
-            Json(serde_json::json!({
-                "success": false,
-                "error": format!("Action failed: {}", res.trim())
-            }))
-        }
-        None => {
-            Json(serde_json::json!({
-                "success": false,
-                "error": "Timeout waiting for host service daemon. Is stack-service-runner.service active?"
-            }))
-        }
+        Some(res) if res.contains("EXIT:0") => Json(serde_json::json!({
+            "success": true,
+            "message": format!("'{}' {}ed successfully", service_id, valid_action)
+        })),
+        Some(res) => Json(serde_json::json!({
+            "success": false,
+            "error": format!("Action failed: {}", res.trim())
+        })),
+        None => Json(serde_json::json!({
+            "success": false,
+            "error": "Timeout waiting for host service daemon. Is stack-service-runner.service active?"
+        })),
     }
 }

@@ -1,0 +1,1134 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Admin Dashboard</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.css">
+  <style>
+    @font-face {
+      font-family: 'Melodrama';
+      src: url('/admin-assets/Melodrama-Medium-Q0USV-od.woff2') format('woff2');
+      font-weight: 500;
+      font-style: normal;
+      font-display: swap;
+    }
+    @font-face {
+      font-family: 'Melodrama';
+      src: url('/admin-assets/Melodrama-Bold-DzBNduUE.woff2') format('woff2');
+      font-weight: 700;
+      font-style: normal;
+      font-display: swap;
+    }
+    :root { 
+      --gold: #d4af37; 
+      --gold-gradient: linear-gradient(135deg, #fae084 0%, #d4af37 60%, #a6811e 100%);
+      --bg: #09090b; 
+      --card: rgba(24, 24, 27, 0.7); 
+      --border: rgba(255, 255, 255, 0.08); 
+      --border-gold: rgba(212, 175, 55, 0.2);
+      --muted: #a1a1aa; 
+    }
+    body { 
+      margin: 0; 
+      font-family: 'Inter', sans-serif; 
+      background: var(--bg); 
+      color: #f4f4f5; 
+      padding: 24px; 
+      background-image: radial-gradient(circle at 50% 0%, rgba(212, 175, 55, 0.06) 0%, transparent 60%);
+      min-height: 100vh;
+    }
+    .container { max-width: 1080px; margin: 0 auto; }
+    .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; }
+    h1, h2, h3 { font-family: 'Melodrama', serif; letter-spacing: -0.02em; color: #f5f5f5; }
+    h1 { 
+      background: var(--gold-gradient);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin: 0; 
+      font-size: 2.2rem;
+      font-weight: 700;
+    }
+
+    .nav-tabs { display: flex; gap: 10px; margin-bottom: 20px; border-bottom: 1px solid var(--border); padding-bottom: 10px; overflow-x: auto; }
+    .tab { padding: 10px 15px; cursor: pointer; border-radius: 8px; font-weight: 600; color: var(--muted); transition: all 0.2s; white-space: nowrap; }
+    .tab.active { background: rgba(212, 175, 55, 0.1); color: var(--gold); }
+    .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; margin-bottom: 20px; }
+    .section { display: none; }
+    .section.active { display: block; }
+    
+    button { background: var(--gold); color: #000; border: none; padding: 10px 16px; border-radius: 8px; font-weight: bold; cursor: pointer; }
+    input, textarea, select { background: rgba(0,0,0,0.3); border: 1px solid var(--border); color: #fff; padding: 10px; border-radius: 8px; width: 100%; box-sizing: border-box; margin-bottom: 10px; }
+    
+    .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 15px; margin-bottom: 20px; }
+    .stat-box { background: rgba(0,0,0,0.3); padding: 15px; border-radius: 10px; border: 1px solid var(--border); }
+    .stat-val { font-size: 24px; font-weight: 800; color: #fff; }
+    
+    table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 14px; }
+    th { text-align: left; color: var(--muted); padding: 10px; border-bottom: 1px solid var(--border); }
+    td { padding: 10px; border-bottom: 1px solid var(--border); }
+    
+    .status-online { color: #00ff88; }
+    .status-fail { color: #ff4d4d; }
+    
+    .project-item { display: flex; gap: 15px; align-items: center; border-bottom: 1px solid var(--border); padding: 10px 0; }
+    .project-item img { width: 80px; height: 60px; object-fit: cover; border-radius: 4px; }
+    
+    .history-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 15px; margin-top: 15px; }
+    .history-item { background: rgba(255,255,255,0.03); border-radius: 10px; overflow: hidden; border: 1px solid var(--border); }
+    .history-item img { width: 100%; height: 120px; object-fit: cover; border-bottom: 1px solid var(--border); }
+    .history-actions { padding: 8px; display: flex; gap: 5px; }
+    .history-actions button { padding: 4px 8px; font-size: 11px; flex: 1; }
+    
+    .msg-email { color: var(--gold); text-decoration: none; }
+    .msg-email:hover { text-decoration: underline; }
+    
+    .table-container { overflow-x: auto; width: 100%; }
+    table { width: 100%; border-collapse: collapse; min-width: 500px; }
+    
+    .delete-btn { color: #ff4d4d; cursor: pointer; font-weight: bold; }
+    .switch { position: relative; display: inline-block; width: 50px; height: 24px; }
+    .switch input { opacity: 0; width: 0; height: 0; }
+    .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #333; transition: .4s; border-radius: 24px; }
+    .slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px; background-color: white; transition: .4s; border-radius: 50%; }
+    input:checked + .slider { background-color: var(--gold); }
+    input:checked + .slider:before { transform: translateX(26px); }
+    /* Debug Console */
+    .debug-console { background: #000; color: #00ff00; padding: 10px; border-radius: 8px; font-family: monospace; font-size: 11px; max-height: 100px; overflow-y: auto; margin-bottom: 20px; border: 1px solid #333; }
+    
+    /* Health & Report UI */
+    .badge { display: inline-block; padding: 3px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; text-transform: uppercase; }
+    .badge-success { background: rgba(16,185,129,0.15); color: #10b981; border: 1px solid rgba(16,185,129,0.3); }
+    .badge-warning { background: rgba(245,158,11,0.15); color: #f59e0b; border: 1px solid rgba(245,158,11,0.3); }
+    .badge-danger { background: rgba(239,68,68,0.15); color: #ef4444; border: 1px solid rgba(239,68,68,0.3); }
+    .progress-bar-bg { background: rgba(255,255,255,0.06); border-radius: 4px; height: 8px; overflow: hidden; margin-top: 6px; }
+    .progress-bar-fill { height: 100%; transition: width 0.4s ease; }
+    .btn-secondary { background: transparent; border: 1px solid var(--gold); color: var(--gold); }
+    .btn-secondary:hover { background: rgba(212,175,55,0.1); }
+    .service-pill { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 6px; margin: 4px; font-size: 12px; font-weight: 600; }
+    .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 10000; align-items: center; justify-content: center; backdrop-filter: blur(4px); }
+    .modal-window { background: #121214; border: 1px solid var(--border); border-radius: 12px; width: 90%; max-width: 900px; height: 85vh; display: flex; flex-direction: column; overflow: hidden; }
+  </style>
+</head>
+<body>
+  <div id="loginOverlay" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:var(--bg); z-index:9999; flex-direction:column; align-items:center; justify-content:center;">
+    <h2 style="color:var(--gold)">Admin Login</h2>
+    <input type="password" id="loginPin" placeholder="Enter PIN" style="width:200px; text-align:center;">
+    <button onclick="doLogin()">Login</button>
+  </div>
+
+  <div class="container">
+    <div id="debugLog" class="debug-console">System ready. Waiting for data...</div>
+    <div class="header">
+      <div><h1>Admin Dashboard</h1><p id="serverInfo" class="muted">Loading server state...</p></div>
+      <button onclick="sessionStorage.clear(); window.location.href='index.html'" style="background:transparent;border:1px solid var(--muted);color:var(--muted)">Logout</button>
+    </div>
+
+    <div class="nav-tabs" id="tabs">
+      <div class="tab active" onclick="showSection('analytics')">Analytics</div>
+      <div class="tab" onclick="showSection('health')">VM Health &amp; Reports</div>
+      <div class="tab" onclick="showSection('portfolio')">Portfolio</div>
+      <div class="tab" onclick="showSection('messages')">Messages</div>
+      <div class="tab" onclick="showSection('security')">Security</div>
+      <div class="tab" onclick="showSection('profile')">Profile</div>
+      <div class="tab" onclick="showSection('settings')">Settings</div>
+    </div>
+
+    <!-- Analytics Section -->
+    <div id="analytics" class="section active">
+      <div class="stats-grid" id="analyticsStats">
+        <div class="stat-box"><div class="muted">Total Views</div><div class="stat-val" id="totalViews">0</div></div>
+        <div class="stat-box"><div class="muted">Unique Visitors</div><div class="stat-val" id="uniqueVisitors">0</div></div>
+        <div class="stat-box"><div class="muted">CPU Load</div><div class="stat-val" id="cpuLoad">0%</div></div>
+        <div class="stat-box"><div class="muted">RAM Used</div><div class="stat-val" id="ramUsed">0MB</div></div>
+      </div>
+      <!-- Full Service Manager -->
+      <div class="card">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-wrap:wrap; gap:10px;">
+          <div>
+            <h3 style="margin:0;">Service &amp; Infrastructure Manager</h3>
+            <small class="muted">Live status and controls for infrastructure, games, mail, and legacy apps</small>
+          </div>
+          <button onclick="loadServicesControls()" class="btn-secondary" style="font-size:12px; padding:6px 12px;">↺ Refresh</button>
+        </div>
+        <div id="servicesControlsContainer">
+          <div class="muted">Loading service controls...</div>
+        </div>
+      </div>
+      <div class="card">
+        <h3>Recent Visitors</h3>
+        <div class="table-container">
+          <table id="visitorTable"><thead><tr><th>IP</th><th>Path</th><th>Agent</th><th>Time</th></tr></thead><tbody id="visitorBody"></tbody></table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Portfolio Section -->
+    <div id="portfolio" class="section">
+      <div class="card">
+        <h3>Add New Project</h3>
+        <input type="text" id="projTitle" placeholder="Project Title">
+        <textarea id="projDesc" placeholder="Description"></textarea>
+        <input type="text" id="projLink" placeholder="External Link (URL)">
+        <input type="file" id="projImage" accept="image/*">
+        <button onclick="addProject()">Save Project</button>
+      </div>
+      <div class="card">
+        <h3>Existing Projects</h3>
+        <div id="projectList"></div>
+      </div>
+    </div>
+
+    <!-- Messages Section -->
+    <div id="messages" class="section">
+      <div class="card" id="messagesContainer">Loading messages...</div>
+    </div>
+
+    <!-- Security Section -->
+    <div id="security" class="section">
+      <div class="stats-grid">
+        <div class="card">
+          <h3>Admin Access Logs</h3>
+          <div class="table-container">
+            <table id="accessTable"><thead><tr><th>IP</th><th>Status</th><th>Time</th></tr></thead><tbody id="accessBody"></tbody></table>
+          </div>
+        </div>
+        <div class="card">
+          <h3>Banned IPs</h3>
+          <div id="bannedList"></div>
+          <div style="margin-top:15px">
+            <input type="text" id="banIp" placeholder="IP Address">
+            <input type="text" id="banReason" placeholder="Reason">
+            <button onclick="banIp()">Ban IP</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Profile Section (Previous logic) -->
+    <div id="profile" class="section">
+      <div class="card">
+        <img src="/api/profile-pic" style="width:120px;height:120px;border-radius:50%;border:3px solid var(--gold);object-fit:cover;" id="currentPic">
+        <div style="margin-top:10px">
+          <input type="file" id="picInput" accept="image/*">
+        </div>
+        <div id="cropperContainer" style="display:none;margin-top:10px">
+          <img id="cropperImage" style="max-width:100%">
+          <button onclick="uploadProfilePic()">Upload Crop</button>
+        </div>
+        <div id="historyContainer" class="history-grid" style="margin-top:20px"></div>
+      </div>
+    </div>
+
+    <!-- Settings Section -->
+    <div id="settings" class="section">
+      <div class="card">
+        <h3>Site Controls</h3>
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px">
+          <div><strong>Maintenance Mode</strong><br><small class="muted">Blocks public access with a notice</small></div>
+          <label class="switch"><input type="checkbox" id="maintSwitch" onchange="toggleMaint(this.checked)"><span class="slider"></span></label>
+        </div>
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px">
+          <div><strong>Site Theme</strong><br><small class="muted">Switch between classic and vibrant design</small></div>
+          <select id="themeSelect" style="width:120px; margin-bottom:0">
+            <option value="classic">Classic</option>
+            <option value="vibrant">Vibrant</option>
+          </select>
+        </div>
+        <div style="margin-top:20px">
+          <strong>Notification Email</strong><br>
+          <small class="muted">Where to send contact form alerts</small>
+          <input type="email" id="notifyEmail" placeholder="you@gmail.com" style="margin-top:5px">
+          
+          <strong>Gmail App Password</strong><br>
+          <small class="muted">Generate this in your Google Account security settings</small>
+          <input type="password" id="smtpPass" placeholder="•••• •••• •••• ••••" style="margin-top:5px">
+          
+          <div style="display:flex;gap:10px;margin-top:5px">
+            <button onclick="saveSettings()">Save Settings</button>
+            <button onclick="testEmail()" style="background:transparent;border:1px solid var(--gold);color:var(--gold)">Test Email</button>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <h3>Quick Links</h3>
+        <a href="http://cs.faizal.uk" target="_blank" style="color:var(--gold)">cs.faizal.uk (CS 1.6)</a><br><br>
+        <a href="http://mac.faizal.uk" target="_blank" style="color:var(--gold)">mac.faizal.uk (MacOS Portal)</a><br><br>
+        <a href="/mail/" target="_blank" style="color:var(--gold)">Stalwart Mail Admin</a>
+      </div>
+    </div>
+
+    <!-- VM Health & Automated Reports Section -->
+    <div id="health" class="section">
+      <!-- Executive Overview Banner -->
+      <div class="card" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px;">
+        <div>
+          <div style="font-size: 12px; color: var(--muted); text-transform: uppercase; font-weight: 700;">VM Health &amp; Diagnostics</div>
+          <div style="display: flex; align-items: center; gap: 12px; margin-top: 4px;">
+            <h2 style="margin: 0; color: #fff;" id="healthHostName">macos (Ubuntu 24.04)</h2>
+            <span id="healthOverallBadge" class="badge badge-success">ALL SYSTEMS OPERATIONAL</span>
+          </div>
+          <small class="muted" id="healthLastChecked">Checking live health...</small>
+        </div>
+        <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+          <button onclick="loadHealthData(true)" class="btn-secondary">↺ Refresh Metrics</button>
+          <button onclick="openReportPreview()" class="btn-secondary">👁 Preview Report</button>
+          <button onclick="sendReportNow()" id="btnSendReport" style="display: flex; align-items: center; gap: 6px;">
+            <span id="sendSpinner" style="display:none; width:12px; height:12px; border:2px solid #000; border-top:2px solid transparent; border-radius:50%; animation:spin 0.8s linear infinite;"></span>
+            ✉ Send Report Email Now
+          </button>
+        </div>
+      </div>
+
+      <!-- Action Items / Warning Box -->
+      <div id="healthIssuesBox" style="display:none; background: rgba(239,68,68,0.1); border-left: 4px solid #ef4444; border-radius: 8px; padding: 14px 16px; margin-bottom: 20px;">
+        <div style="font-weight: 700; color: #ef4444; margin-bottom: 6px;">Action Items &amp; Warnings Detected</div>
+        <ul id="healthIssuesList" style="margin: 0; padding-left: 20px; color: #fca5a5; font-size: 13px;"></ul>
+      </div>
+
+      <!-- System KPI Grid -->
+      <div class="stats-grid">
+        <div class="stat-box">
+          <div class="muted">System Uptime</div>
+          <div class="stat-val" id="healthUptime">--</div>
+          <small class="muted" id="healthBoot">Calculating...</small>
+        </div>
+        <div class="stat-box">
+          <div class="muted">CPU Load (1m, 5m, 15m)</div>
+          <div class="stat-val" id="healthCpuLoad">0.00</div>
+          <small class="muted" id="healthCpuModel">Cores: 1</small>
+        </div>
+        <div class="stat-box">
+          <div class="muted">Memory Usage</div>
+          <div class="stat-val" id="healthRamVal">0%</div>
+          <small class="muted" id="healthRamDetails">0 MB / 0 MB</small>
+          <div class="progress-bar-bg"><div id="healthRamBar" class="progress-bar-fill" style="width: 0%; background: #3b82f6;"></div></div>
+        </div>
+        <div class="stat-box">
+          <div class="muted">Root Disk (/dev/sda1)</div>
+          <div class="stat-val" id="healthDiskVal">0%</div>
+          <small class="muted" id="healthDiskDetails">0 GB Free</small>
+          <div class="progress-bar-bg"><div id="healthDiskBar" class="progress-bar-fill" style="width: 0%; background: #10b981;"></div></div>
+        </div>
+      </div>
+
+      <!-- Automated Email Report Settings Card -->
+      <div class="card">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 10px;">
+          <div>
+            <h3 style="margin: 0;">Automated 24-Hour Email Report</h3>
+            <small class="muted">Dispatches full system metrics, PM2, Docker, 24h errors &amp; analytics daily from <code style="color:var(--gold);">reports@faizal.uk</code> via Brevo Relay (Port 587)</small>
+          </div>
+          <div style="display:flex; align-items:center; gap: 10px;">
+            <span class="badge badge-success" id="cronStatusBadge">CRON ACTIVE: DAILY 08:00 UTC</span>
+          </div>
+        </div>
+        
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 15px; margin-top: 15px;">
+          <div>
+            <label style="font-size: 13px; font-weight: 600; color: #cbd5e1;">Recipient Email Addresses (comma separated)</label>
+            <input type="text" id="reportRecipient" placeholder="me@faizal.uk, fazztronic@gmail.com" style="margin-top: 6px;">
+          </div>
+          <div>
+            <label style="font-size: 13px; font-weight: 600; color: #cbd5e1;">Daily Dispatch Time (UTC)</label>
+            <input type="text" id="reportTime" value="08:00" placeholder="08:00" style="margin-top: 6px;">
+          </div>
+        </div>
+
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 10px; flex-wrap: wrap; gap: 10px;">
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <label class="switch"><input type="checkbox" id="reportEnabledSwitch" checked><span class="slider"></span></label>
+            <span style="font-size: 13px; font-weight: 600;">Enable Daily Automated Dispatch</span>
+          </div>
+          <div style="display: flex; gap: 10px;">
+            <button onclick="saveReportSettings()">Save Settings</button>
+            <button onclick="sendReportNow()" class="btn-secondary">Test Send Now</button>
+          </div>
+        </div>
+
+        <!-- Last Sent Status -->
+        <div style="margin-top: 15px; padding-top: 12px; border-top: 1px solid var(--border); font-size: 12px; color: var(--muted);" id="lastReportInfo">
+          Last Report Sent: None yet recorded.
+        </div>
+      </div>
+
+      <!-- Docker Containers Table Card -->
+      <div class="card">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+          <h3 style="margin: 0;">Docker Containers Status</h3>
+          <span id="dockerCountBadge" class="badge badge-success">0 Running</span>
+        </div>
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Image</th>
+                <th>Health / State</th>
+                <th>CPU %</th>
+                <th>Memory</th>
+                <th>Network I/O</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="dockerTableBody">
+              <tr><td colspan="7" class="muted" style="text-align:center;">Loading Docker containers...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- System Services & Microservices (compact grouped view) -->
+      <div class="card">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+          <h3 style="margin: 0;">System Services &amp; Microservices</h3>
+          <div style="display:flex; gap:8px;">
+            <span id="servicesCountBadge" class="badge badge-success">Active Overview</span>
+            <button onclick="loadServicesControls(); loadHealthData();" class="btn-secondary" style="padding:4px 10px; font-size:11px;">↺ Refresh</button>
+          </div>
+        </div>
+        <!-- Compact table for at-a-glance status -->
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>Service</th>
+                <th>Group</th>
+                <th>Port</th>
+                <th>Status</th>
+                <th>Control</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody id="healthServicesBody">
+              <tr><td colspan="6" class="muted" style="text-align:center;">Loading services...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Microservices & Active Ports Probe -->
+      <div class="card">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+          <h3 style="margin:0;">Active Microservices &amp; Port Probes</h3>
+          <div style="display:flex; gap:12px; font-size:11px; font-weight:600; align-items:center;">
+            <span style="color:#10b981;">● ONLINE</span>
+            <span style="color:#f59e0b;">● NOT BOUND (mail config)</span>
+            <span style="color:#64748b;">● STOPPED / IDLE</span>
+            <span style="color:#ef4444;">● OFFLINE (error)</span>
+          </div>
+        </div>
+        <div id="servicePillsContainer" style="display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px;">
+          <div class="muted">Probing ports...</div>
+        </div>
+      </div>
+
+      <!-- Stalwart Mail Server Diagnostics -->
+      <div class="card" style="border-color: rgba(245,158,11,0.25);">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:15px; flex-wrap:wrap;">
+          <div>
+            <h3 style="margin:0 0 6px 0; color:#f59e0b;">📧 Stalwart Mail Server</h3>
+            <small class="muted">Container: <code style="color:var(--gold);">stalwart-mail</code> &bull; Image: <code style="color:var(--gold);">stalwartlabs/stalwart:latest</code></small>
+          </div>
+          <a href="/mail/" target="_blank" style="text-decoration:none;">
+            <button class="btn-secondary" style="padding:6px 14px; font-size:12px;">Open Stalwart Admin →</button>
+          </a>
+        </div>
+        <div style="margin-top:14px; display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:10px;">
+          <div style="background:rgba(0,0,0,0.3); padding:12px; border-radius:8px; border:1px solid var(--border);">
+            <div style="font-size:11px; color:var(--muted); font-weight:700; text-transform:uppercase; margin-bottom:6px;">Admin &amp; API</div>
+            <div style="display:flex; align-items:center; gap:8px;">
+              <span id="stallAdminDot" style="width:8px; height:8px; border-radius:50%; background:#64748b; display:inline-block;"></span>
+              <span style="font-size:13px; font-weight:600;">Port 8080</span>
+            </div>
+            <small class="muted">Web admin panel for managing accounts, DKIM, DNS</small>
+          </div>
+          <div style="background:rgba(0,0,0,0.3); padding:12px; border-radius:8px; border:1px solid var(--border);">
+            <div style="font-size:11px; color:var(--muted); font-weight:700; text-transform:uppercase; margin-bottom:6px;">SMTPS / Submission</div>
+            <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+              <span id="stallSmtpsDot" style="width:8px; height:8px; border-radius:50%; background:#64748b; display:inline-block;"></span>
+              <span style="font-size:13px; font-weight:600;">Ports 465 &amp; 587</span>
+            </div>
+            <small class="muted">Outgoing mail. Configure listeners in Stalwart Admin → Settings → Server → Listeners</small>
+          </div>
+          <div style="background:rgba(0,0,0,0.3); padding:12px; border-radius:8px; border:1px solid var(--border);">
+            <div style="font-size:11px; color:var(--muted); font-weight:700; text-transform:uppercase; margin-bottom:6px;">IMAPS (Incoming)</div>
+            <div style="display:flex; align-items:center; gap:8px;">
+              <span id="stallImapsDot" style="width:8px; height:8px; border-radius:50%; background:#64748b; display:inline-block;"></span>
+              <span style="font-size:13px; font-weight:600;">Port 993</span>
+            </div>
+            <small class="muted">Mail client access. Configure in Stalwart Admin → Settings → Server → Listeners</small>
+          </div>
+        </div>
+        <div style="margin-top:12px; padding:10px 14px; background:rgba(245,158,11,0.06); border:1px solid rgba(245,158,11,0.2); border-radius:8px; font-size:12px; color:#f59e0b;">
+          ⚠️ <strong>Why are mail ports showing NOT BOUND?</strong> Stalwart's Docker container runs with <code>network_mode: host</code>, so it has direct access to bind any port on the VM. However, <strong>the listeners must be configured inside Stalwart's own admin UI</strong>. Go to <strong>Stalwart Admin → Settings → Server → Listeners</strong> and ensure SMTPS (465), SMTP Submission (587), and IMAP (993) listeners are all created and enabled. The container being healthy at port 8080 confirms Stalwart is running — just needs internal listener setup.
+        </div>
+      </div>
+
+      <!-- 24-Hour System Errors & Security Incidents -->
+      <div class="card">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; flex-wrap: wrap; gap: 8px;">
+          <h3 style="margin: 0;">24-Hour Errors &amp; Security Incidents</h3>
+          <div style="font-size: 12px; color: var(--muted);">
+            SSH Auth Blocks: <strong id="sshBlocksCount" style="color:#f59e0b;">0</strong> &bull; Total Incidents: <strong id="totalIncidentsCount">0</strong>
+          </div>
+        </div>
+        <div id="healthErrorsContainer" style="margin-top: 10px;">
+          <div class="muted">Loading system logs...</div>
+        </div>
+      </div>
+
+      <!-- Report Dispatch History -->
+      <div class="card">
+        <h3>Report Dispatch History</h3>
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>Timestamp</th>
+                <th>Recipient</th>
+                <th>Health</th>
+                <th>Incidents</th>
+                <th>Trigger</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="reportHistoryBody">
+              <tr><td colspan="6" class="muted" style="text-align:center;">No past reports logged yet</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Report Preview Modal -->
+  <div id="reportModal" class="modal-overlay">
+    <div class="modal-window">
+      <div style="padding: 12px 18px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; background: #000;">
+        <strong style="color: var(--gold); font-size: 15px;">Automated Health Report &mdash; Live Preview</strong>
+        <div style="display: flex; gap: 10px;">
+          <button onclick="sendReportNow()" class="btn-secondary" style="padding: 6px 12px; font-size: 12px;">✉ Send This Now</button>
+          <button onclick="closeReportPreview()" style="background: transparent; border: 1px solid var(--muted); color: var(--muted); padding: 6px 12px; font-size: 12px;">✕ Close</button>
+        </div>
+      </div>
+      <iframe id="reportPreviewIframe" style="flex: 1; border: none; width: 100%; height: 100%; background: #0b0b0c;"></iframe>
+    </div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.js"></script>
+  <script>
+    let auth = sessionStorage.getItem('adminPin');
+    let cropper;
+
+    window.onload = () => {
+      if (!auth) {
+        document.getElementById('loginOverlay').style.display = 'flex';
+      } else {
+        loadAll();
+      }
+    };
+
+    async function doLogin() {
+      const pin = document.getElementById('loginPin').value;
+      try {
+        const res = await fetch('/api/verify-pin', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pin })
+        });
+        const data = await res.json();
+        if (data.success) {
+          sessionStorage.setItem('adminPin', pin);
+          auth = pin;
+          document.getElementById('loginOverlay').style.display = 'none';
+          loadAll();
+        } else {
+          alert('Invalid PIN');
+        }
+      } catch (err) { alert('Login error'); }
+    }
+
+    function showSection(id) {
+      document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+      const targetSec = document.getElementById(id);
+      if (targetSec) targetSec.classList.add('active');
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      if (window.event && window.event.target && window.event.target.classList.contains('tab')) {
+        window.event.target.classList.add('active');
+      }
+      if (id === 'health') {
+        loadHealthData();
+      }
+    }
+
+    function log(msg, isError=false) {
+      const el = document.getElementById('debugLog');
+      const time = new Date().toLocaleTimeString();
+      el.innerHTML = `<div style="color:${isError?'#ff4d4d':'#00ff00'}">[${time}] ${msg}</div>` + el.innerHTML;
+    }
+
+    async function api(path, method='GET', body=null) {
+      const opts = { headers: { 'Authorization': auth } };
+      if (method !== 'GET') { 
+        opts.method = method; 
+        if (body instanceof FormData) opts.body = body; 
+        else if (body !== null) { 
+          opts.headers['Content-Type'] = 'application/json'; 
+          opts.body = JSON.stringify(body); 
+        } 
+      }
+      try {
+        const r = await fetch(path, opts);
+        if (!r.ok) {
+          const text = await r.text();
+          throw new Error(`HTTP ${r.status}: ${text}`);
+        }
+        const data = await r.json();
+        log(`${method} ${path} - Success`);
+        return data;
+      } catch (err) {
+        log(`${method} ${path} - Failed: ${err.message}`, true);
+        throw err;
+      }
+    }
+
+    async function loadAll() {
+      log('Refreshing dashboard data...');
+      try {
+        const statsData = await api('/api/system-stats');
+        if (statsData.success) {
+          const { os, pm2, analytics } = statsData.stats;
+          document.getElementById('serverInfo').innerText = `Ubuntu ${os.release.split('-')[0]} | Up ${Math.floor(os.uptime/3600)}h`;
+          
+          document.getElementById('totalViews').innerText = analytics.totalViews || 0;
+          document.getElementById('uniqueVisitors').innerText = analytics.uniqueVisitors || 0;
+          document.getElementById('cpuLoad').innerText = (os.cpuLoad || 0) + '%';
+          document.getElementById('ramUsed').innerText = ((os.usedMem || 0)/(1024*1024)).toFixed(0) + 'MB';
+          
+          document.getElementById('visitorBody').innerHTML = (analytics.recentVisitors || []).map(v => `<tr><td>${v.ip}</td><td>${v.path}</td><td title="${v.user_agent}">${v.user_agent.substring(0,20)}...</td><td>${new Date(v.timestamp).toLocaleTimeString()}</td></tr>`).join('');
+        }
+      } catch (err) { console.error('Stats error:', err); }
+
+      // Fetch on-demand services controls
+      await loadServicesControls();
+
+      try {
+        const projects = await api('/api/projects');
+        document.getElementById('projectList').innerHTML = projects.projects.map(p => `<div class="project-item"><img src="/api/project-image/${p.id}"><div><strong>${p.title}</strong><br><small>${p.link}</small></div><div class="delete-btn" onclick="delProject(${p.id})">Delete</div></div>`).join('') || '<p class="muted">No projects in database yet.</p>';
+      } catch (err) { console.error('Project error:', err); }
+
+      try {
+        const messages = await api('/api/messages');
+        document.getElementById('messagesContainer').innerHTML = messages.messages.map(m => `
+          <div class="card">
+            <div class="delete-btn" style="float:right" onclick="delMessage(${m.id})">×</div>
+            <strong>${m.name}</strong> (<a href="mailto:${m.email}" class="msg-email">${m.email}</a>)<br>
+            <small>${new Date(m.created_at).toLocaleString()}</small>
+            <p>${m.message}</p>
+          </div>
+        `).join('') || '<p class="muted">No messages.</p>';
+      } catch (err) { console.error('Message error:', err); }
+
+      try {
+        const logs = await api('/api/access-logs');
+        document.getElementById('accessBody').innerHTML = logs.logs.map(l => `<tr><td>${l.ip}</td><td class="${l.status==='SUCCESS'?'status-online':'status-fail'}">${l.status}</td><td>${new Date(l.timestamp).toLocaleString()}</td></tr>`).join('') || '<tr><td colspan="3" class="muted">No logs yet. Try logging in again.</td></tr>';
+      } catch (err) { console.error('Logs error:', err); }
+
+      try {
+        const banned = await api('/api/banned-ips');
+        document.getElementById('bannedList').innerHTML = banned.ips.map(i => `<div style="display:flex;justify-content:space-between;margin-bottom:5px"><span>${i.ip}</span><span class="delete-btn" onclick="unbanIp('${i.ip}')">Unban</span></div>`).join('') || '<p class="muted">No banned IPs.</p>';
+      } catch (err) { console.error('Banned error:', err); }
+
+      try {
+        const settings = await api('/api/settings');
+        const maint = settings.settings.find(s => s.key === 'maintenance_mode');
+        const email = settings.settings.find(s => s.key === 'notification_email');
+        const theme = settings.settings.find(s => s.key === 'site_theme');
+        if (maint) document.getElementById('maintSwitch').checked = maint.value === 'true';
+        if (email) document.getElementById('notifyEmail').value = email.value;
+        if (theme) document.getElementById('themeSelect').value = theme.value;
+      } catch (err) { console.error('Settings error:', err); }
+
+      try {
+        const res = await api('/api/profile-history');
+        const container = document.getElementById('historyContainer');
+        if (res.success && res.history.length > 0) {
+          container.innerHTML = res.history.map(item => `
+            <div class="history-item">
+              <img src="/api/profile-pic/${item.id}">
+              <div class="history-actions">
+                <button onclick="useHistoryPic(${item.id})">Use</button>
+                <button onclick="deleteHistoryPic(${item.id})" style="background:rgba(255,0,0,0.1);color:#ff4d4d">Del</button>
+              </div>
+            </div>
+          `).join('');
+        } else {
+          container.innerHTML = '<p class="muted">No history.</p>';
+        }
+      } catch (err) { console.error('History error:', err); }
+    }
+
+    async function addProject() {
+      const fd = new FormData();
+      fd.append('title', document.getElementById('projTitle').value);
+      fd.append('description', document.getElementById('projDesc').value);
+      fd.append('link', document.getElementById('projLink').value);
+      fd.append('image', document.getElementById('projImage').files[0]);
+      await api('/api/projects', 'POST', fd); loadAll();
+    }
+    async function delProject(id) { if(confirm('Delete?')) { await api(`/api/projects/${id}`, 'DELETE'); loadAll(); } }
+    async function delMessage(id) { if(confirm('Delete?')) { await api(`/api/messages/${id}`, 'DELETE'); loadAll(); } }
+    async function banIp() { await api('/api/ban-ip', 'POST', { ip: document.getElementById('banIp').value, reason: document.getElementById('banReason').value }); loadAll(); }
+    async function unbanIp(ip) { await api(`/api/ban-ip/${ip}`, 'DELETE'); loadAll(); }
+    async function toggleMaint(val) { await api('/api/settings', 'POST', { key: 'maintenance_mode', value: val.toString() }); }
+    async function saveSettings() { 
+      await api('/api/settings', 'POST', { key: 'notification_email', value: document.getElementById('notifyEmail').value }); 
+      await api('/api/settings', 'POST', { key: 'smtp_password', value: document.getElementById('smtpPass').value });
+      await api('/api/settings', 'POST', { key: 'site_theme', value: document.getElementById('themeSelect').value });
+      alert('Saved'); 
+    }
+    async function testEmail() {
+      try {
+        const res = await api('/api/test-email', 'POST');
+        if (res.success) alert('Test email sent! Check your inbox (and spam).');
+        else alert('Failed: ' + res.error);
+      } catch(e) { alert('Error sending test email.'); }
+    }
+
+    // ==========================================
+    // SERVICE & INFRASTRUCTURE MANAGER
+    // ==========================================
+
+    const GROUP_META = {
+      'Core Infrastructure':     { icon: '🖥',  color: '#3b82f6', desc: 'Always-on services — never manually stopped' },
+      'Mail Infrastructure':     { icon: '📧',  color: '#f59e0b', desc: 'Stalwart mail container + protocol ports' },
+      'On-Demand Game Engines':  { icon: '🎮',  color: '#8b5cf6', desc: 'Start/stop to save RAM when not playing' },
+      'Legacy App Backends':     { icon: '↻',   color: '#f97316', desc: 'Existing app and game backends remain usable while each migrates to Rust' },
+    };
+
+    function buildServiceCard(s) {
+      const isRunning = s.status === 'running';
+      const isSub = s.id === 'stalwart-smtps' || s.id === 'stalwart-imap';
+      const isNone = s.control_type === 'none';
+      const isCore = s.category === 'core';
+      const isMail = s.category === 'mail' && !isSub;
+
+      let statusBadge, statusColor;
+      if (isSub)         { statusBadge = isRunning ? 'BOUND' : 'NOT BOUND'; statusColor = isRunning ? '#10b981' : '#f59e0b'; }
+      else               { statusBadge = isRunning ? 'RUNNING' : 'STOPPED';  statusColor = isRunning ? '#10b981' : '#ef4444'; }
+
+      // Build action buttons
+      let buttonsHtml = '';
+      if (isNone) {
+        buttonsHtml = isSub
+          ? `<small style="color:${statusColor}; font-size:10px;">${isRunning ? '✓ Port bound' : '⚠ Configure in Stalwart Admin → Listeners'}</small>`
+          : `<span class="badge" style="background:rgba(100,116,139,0.12); color:#64748b; border:1px solid rgba(100,116,139,0.3); font-size:10px;">NO DIRECT CONTROL</span>`;
+      } else if (isCore && s.id === 'nginx') {
+        buttonsHtml = `<button onclick="toggleServiceAction('nginx','restart')" class="btn-secondary" style="padding:5px 10px;font-size:11px;">↺ Restart</button>`;
+      } else {
+        const stopBtn  = `<button onclick="toggleServiceAction('${s.id}','stop')" style="padding:5px 10px;font-size:11px;background:rgba(239,68,68,0.15);color:#ef4444;border:1px solid #ef444440;">■ Stop</button>`;
+        const startBtn = `<button onclick="toggleServiceAction('${s.id}','start')" style="padding:5px 10px;font-size:11px;background:var(--gold);color:#000;border:none;">▶ Start</button>`;
+        const restartBtn = `<button onclick="toggleServiceAction('${s.id}','restart')" class="btn-secondary" style="padding:5px 10px;font-size:11px;">↺</button>`;
+        if (isRunning) {
+          buttonsHtml = restartBtn + ' ' + stopBtn;
+        } else {
+          buttonsHtml = startBtn;
+        }
+      }
+
+      const indent = isSub ? 'margin-left:14px; border-left:2px solid rgba(245,158,11,0.3); padding-left:10px;' : '';
+      const bg = isSub ? 'rgba(0,0,0,0.15)' : 'rgba(0,0,0,0.28)';
+      return `
+        <div style="${indent} background:${bg}; border:1px solid rgba(255,255,255,0.06); border-radius:9px; padding:13px 14px; display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:8px;">
+          <div style="flex:1; min-width:180px;">
+            <div style="display:flex; align-items:center; gap:8px; margin-bottom:4px;">
+              <span style="width:8px; height:8px; border-radius:50%; background:${statusColor}; flex-shrink:0;"></span>
+              <strong style="font-size:${isSub ? '13px' : '14px'}; color:${isSub ? '#cbd5e1' : '#fff'};">${s.name}</strong>
+              <span style="font-size:10px; font-weight:700; padding:1px 6px; border-radius:3px; background:${statusColor}20; color:${statusColor}; border:1px solid ${statusColor}30;">${statusBadge}</span>
+            </div>
+            <p style="margin:0; font-size:11px; color:var(--muted); line-height:1.4;">${s.description}</p>
+            <div style="margin-top:5px; font-size:11px; color:#64748b;">
+              Port <code style="color:var(--gold); font-size:10px;">${s.port}</code>
+              ${!isSub ? ` &bull; <span style="color:${s.control_type === 'docker' ? '#3b82f6' : '#a78bfa'};">${s.control_type === 'docker' ? '🐳 Docker' : '⚙ systemctl'}</span>` : ''}
+            </div>
+          </div>
+          <div style="display:flex; gap:6px; align-items:center; flex-shrink:0;">
+            ${buttonsHtml}
+          </div>
+        </div>`;
+    }
+
+    async function loadServicesControls() {
+      const container = document.getElementById('servicesControlsContainer');
+      if (!container) return;
+      container.innerHTML = '<div class="muted" style="padding:10px;">Probing services...</div>';
+      try {
+        const res = await api('/api/services');
+        if (!res.success || !res.services) { container.innerHTML = '<div class="muted">Failed to load services.</div>'; return; }
+
+        // Group by group label
+        const groups = {};
+        res.services.forEach(s => {
+          if (!groups[s.group]) groups[s.group] = [];
+          groups[s.group].push(s);
+        });
+
+        let html = '';
+        for (const [groupName, services] of Object.entries(groups)) {
+          const meta = GROUP_META[groupName] || { icon: '●', color: '#64748b', desc: '' };
+          const anyRunning = services.filter(s => !['stalwart-smtps','stalwart-imap'].includes(s.id)).some(s => s.status === 'running');
+          html += `
+            <div style="margin-bottom:20px;">
+              <div style="display:flex; align-items:center; gap:8px; margin-bottom:10px; padding-bottom:8px; border-bottom:1px solid rgba(255,255,255,0.06);">
+                <span style="font-size:16px;">${meta.icon}</span>
+                <div>
+                  <div style="font-weight:700; color:${meta.color}; font-size:13px;">${groupName}</div>
+                  <div style="font-size:11px; color:var(--muted);">${meta.desc}</div>
+                </div>
+                <span style="margin-left:auto; font-size:10px; font-weight:700; padding:2px 8px; border-radius:4px; background:${meta.color}15; color:${meta.color}; border:1px solid ${meta.color}30;">
+                  ${services.filter(s => s.status === 'running').length}/${services.length} running
+                </span>
+              </div>
+              ${services.map(buildServiceCard).join('')}
+            </div>`;
+        }
+        container.innerHTML = html;
+      } catch (err) {
+        container.innerHTML = `<div class="muted" style="color:#ef4444;">Error: ${err.message}</div>`;
+      }
+    }
+
+    async function toggleServiceAction(serviceId, action) {
+      log(`${action.toUpperCase()} → ${serviceId}`);
+      try {
+        const res = await api(`/api/services/${serviceId}/action`, 'POST', { action });
+        if (res.success) {
+          log(`✓ ${serviceId} ${action} OK`);
+          await loadServicesControls();
+          if (document.getElementById('health').classList.contains('active')) loadHealthData();
+        } else {
+          alert(`Service action failed: ${res.error || 'Unknown error'}`);
+          log(`✗ ${serviceId} ${action} failed: ${res.error}`, true);
+        }
+      } catch (err) {
+        alert(`Error: ${err.message}`);
+        log(`✗ ${serviceId} ${action} exception: ${err.message}`, true);
+      }
+    }
+
+    // Profile Pic Logic (previous logic)
+    document.getElementById('picInput').onchange = e => {
+      const reader = new FileReader();
+      reader.onload = ev => {
+        document.getElementById('cropperImage').src = ev.target.result;
+        document.getElementById('cropperContainer').style.display='block';
+        if(cropper) cropper.destroy();
+        cropper = new Cropper(document.getElementById('cropperImage'), { aspectRatio:1 });
+      };
+      reader.readAsDataURL(e.target.files[0]);
+    };
+    async function uploadProfilePic() {
+      cropper.getCroppedCanvas().toBlob(async blob => {
+        const fd = new FormData(); fd.append('profilePic', blob);
+        await api('/api/upload-picture', 'POST', fd);
+        document.getElementById('currentPic').src = '/api/profile-pic?t='+Date.now();
+        document.getElementById('cropperContainer').style.display='none';
+      }, 'image/jpeg');
+    }
+
+    async function useHistoryPic(id) {
+      if(confirm('Use this past photo as your current profile picture?')) {
+        await api(`/api/use-history-pic/${id}`, 'POST');
+        document.getElementById('currentPic').src = '/api/profile-pic?t='+Date.now();
+        loadAll();
+      }
+    }
+
+    async function deleteHistoryPic(id) {
+      if(confirm('Delete this photo from history permanently?')) {
+        await api(`/api/profile-history/${id}`, 'DELETE');
+        loadAll();
+      }
+    }
+
+    // ==========================================
+    // VM HEALTH & 24-HOUR REPORTING FUNCTIONS
+    // ==========================================
+    let healthDataCache = null;
+
+    async function loadHealthData(showToast = false) {
+      log('Fetching VM health & reports data...');
+      try {
+        const [dataRes, statusRes] = await Promise.all([
+          api('/api/health-report/data'),
+          api('/api/health-report/status')
+        ]);
+
+        if (dataRes.success && dataRes.data) {
+          healthDataCache = dataRes.data;
+          await renderHealthUI(dataRes.data);
+          if (showToast) alert('Health metrics refreshed!');
+        }
+
+        if (statusRes.success && statusRes.settings) {
+          document.getElementById('reportRecipient').value = statusRes.settings.recipient || 'me@faizal.uk';
+          document.getElementById('reportTime').value = statusRes.settings.time || '08:00';
+          document.getElementById('reportEnabledSwitch').checked = statusRes.settings.enabled;
+          
+          if (statusRes.settings.lastSent) {
+            const dateStr = new Date(statusRes.settings.lastSent).toLocaleString();
+            document.getElementById('lastReportInfo').innerHTML = `Last Report Sent: <strong>${dateStr}</strong> to <code style="color:var(--gold);">${statusRes.settings.recipient}</code> (Status: <span class="badge ${statusRes.settings.lastStatus === 'SUCCESS' ? 'badge-success' : 'badge-danger'}">${statusRes.settings.lastStatus}</span>)`;
+          }
+
+          if (statusRes.history && statusRes.history.length > 0) {
+            document.getElementById('reportHistoryBody').innerHTML = statusRes.history.map(h => {
+              const badge = h.overall_health === 'CRITICAL' ? 'badge-danger' : (h.overall_health === 'WARNING' ? 'badge-warning' : 'badge-success');
+              const statusBadge = h.delivery_status === 'SUCCESS' ? 'badge-success' : 'badge-danger';
+              return `<tr>
+                <td>${new Date(h.timestamp).toLocaleString()}</td>
+                <td>${h.recipient}</td>
+                <td><span class="badge ${badge}">${h.overall_health}</span></td>
+                <td>${h.error_count}</td>
+                <td>${h.trigger_source}</td>
+                <td><span class="badge ${statusBadge}">${h.delivery_status}</span></td>
+              </tr>`;
+            }).join('');
+          }
+        }
+      } catch (err) {
+        console.error('Failed to load health data:', err);
+      }
+    }
+
+    async function renderHealthUI(data) {
+      document.getElementById('healthHostName').innerText = `${data.hostname} (Linux ${data.release.split('-')[0]})`;
+      document.getElementById('healthLastChecked').innerText = `Last polled: ${new Date().toLocaleTimeString()} • ${data.arch}`;
+
+      const overallBadge = document.getElementById('healthOverallBadge');
+      if (data.overallStatus === 'CRITICAL') {
+        overallBadge.className = 'badge badge-danger';
+        overallBadge.innerText = '🔴 CRITICAL ISSUES';
+      } else if (data.overallStatus === 'WARNING') {
+        overallBadge.className = 'badge badge-warning';
+        overallBadge.innerText = '🟡 WARNINGS DETECTED';
+      } else {
+        overallBadge.className = 'badge badge-success';
+        overallBadge.innerText = '🟢 ALL SYSTEMS OPERATIONAL';
+      }
+
+      // Action items box
+      const issuesBox = document.getElementById('healthIssuesBox');
+      const issuesList = document.getElementById('healthIssuesList');
+      if (data.healthIssues && data.healthIssues.length > 0) {
+        issuesList.innerHTML = data.healthIssues.map(i => `<li>${i}</li>`).join('');
+        issuesBox.style.display = 'block';
+      } else {
+        issuesBox.style.display = 'none';
+      }
+
+      // KPIs
+      document.getElementById('healthUptime').innerText = data.uptimeFormatted;
+      document.getElementById('healthCpuLoad').innerText = `${data.cpu.loadAvg1m}, ${data.cpu.loadAvg5m}`;
+      document.getElementById('healthCpuModel').innerText = `${data.cpu.cores} Cores • ${data.cpu.loadPercent}% utilized`;
+
+      document.getElementById('healthRamVal').innerText = `${data.memory.usedPercent}%`;
+      document.getElementById('healthRamDetails').innerText = `${(data.memory.usedBytes / (1024*1024)).toFixed(0)} MB / ${(data.memory.totalBytes / (1024*1024)).toFixed(0)} MB`;
+      const ramBar = document.getElementById('healthRamBar');
+      ramBar.style.width = `${data.memory.usedPercent}%`;
+      ramBar.style.background = data.memory.usedPercent > 85 ? '#f59e0b' : '#3b82f6';
+
+      document.getElementById('healthDiskVal').innerText = `${data.disk.usedPercent}%`;
+      document.getElementById('healthDiskDetails').innerText = `${(data.disk.availBytes / (1024*1024*1024)).toFixed(1)} GB Free of ${(data.disk.totalBytes / (1024*1024*1024)).toFixed(0)} GB`;
+      const diskBar = document.getElementById('healthDiskBar');
+      diskBar.style.width = `${data.disk.usedPercent}%`;
+      diskBar.style.background = data.disk.usedPercent > 85 ? (data.disk.usedPercent > 92 ? '#ef4444' : '#f59e0b') : '#10b981';
+
+      // Docker Containers
+      document.getElementById('dockerCountBadge').innerText = `${data.dockerSummary.running} Running / ${data.dockerSummary.healthy} Healthy`;
+      if (data.docker && data.docker.length > 0) {
+        document.getElementById('dockerTableBody').innerHTML = data.docker.map(c => {
+          const isHealthy = c.health === 'healthy' || (c.state === 'running' && c.health === 'none');
+          const badgeClass = isHealthy ? 'badge-success' : 'badge-danger';
+          return `<tr>
+            <td><strong>${c.name}</strong></td>
+            <td><small class="muted">${c.image}</small></td>
+            <td><span class="badge ${badgeClass}">${c.health !== 'none' ? c.health : c.state}</span></td>
+            <td>${c.cpu}</td>
+            <td>${c.memory}</td>
+            <td>${c.netIo}</td>
+            <td><small>${c.status}</small></td>
+          </tr>`;
+        }).join('');
+      } else {
+        document.getElementById('dockerTableBody').innerHTML = '<tr><td colspan="7" class="muted" style="text-align:center;">No docker containers found.</td></tr>';
+      }
+
+      // System Services Table — fetch from /api/services for richer data
+      try {
+        const svcRes = await fetch('/api/services', { headers: { 'Authorization': auth } });
+        const svcData = await svcRes.json();
+        if (svcData.success && svcData.services) {
+          const svcs = svcData.services;
+          const coreRunning = svcs.filter(s => s.category === 'core' && s.status === 'running').length;
+          const gameRunning  = svcs.filter(s => s.category === 'game'  && s.status === 'running').length;
+          const gameTotal    = svcs.filter(s => s.category === 'game').length;
+          document.getElementById('servicesCountBadge').innerText = `${coreRunning} Core | ${gameRunning}/${gameTotal} Games`;
+
+          const groupColors = { core: '#3b82f6', mail: '#f59e0b', game: '#8b5cf6', legacy: '#f97316' };
+          document.getElementById('healthServicesBody').innerHTML = svcs.map(s => {
+            const isRunning = s.status === 'running';
+            const isSub = s.id === 'stalwart-smtps' || s.id === 'stalwart-imap';
+            const gc = groupColors[s.category] || '#64748b';
+
+            let statusBadge, badgeClass;
+            if (isSub)  { statusBadge = isRunning ? 'BOUND' : 'NOT BOUND'; badgeClass = isRunning ? 'badge-success' : 'badge-warning'; }
+            else { statusBadge = isRunning ? 'RUNNING' : 'STOPPED'; badgeClass = isRunning ? 'badge-success' : 'badge-danger'; }
+
+            let actionBtn = '<span class="muted" style="font-size:10px;">—</span>';
+            if (s.control_type !== 'none') {
+              if (isRunning) {
+                actionBtn = `<button onclick="toggleServiceAction('${s.id}','restart')" class="btn-secondary" style="padding:3px 8px;font-size:10px;">↺</button>
+                             <button onclick="toggleServiceAction('${s.id}','stop')" style="padding:3px 8px;font-size:10px;background:rgba(239,68,68,0.15);color:#ef4444;border:1px solid #ef444440;">■</button>`;
+              } else {
+                actionBtn = `<button onclick="toggleServiceAction('${s.id}','start')" style="padding:3px 8px;font-size:10px;background:var(--gold);color:#000;border:none;">▶</button>`;
+              }
+            }
+
+            const indent = isSub ? 'padding-left:24px; color:#94a3b8;' : '';
+            return `<tr style="${indent}">
+              <td><strong style="font-size:${isSub ? '12px' : '13px'};">${s.name}</strong></td>
+              <td><span style="font-size:10px;padding:1px 5px;border-radius:3px;background:${gc}18;color:${gc};border:1px solid ${gc}30;">${s.group.replace(' Infrastructure','')}</span></td>
+              <td><code style="color:var(--gold);font-size:11px;">${s.port}</code></td>
+              <td><span class="badge ${badgeClass}" style="font-size:10px;">${statusBadge}</span></td>
+              <td style="font-size:11px;">${s.control_type === 'docker' ? '<span style="color:#3b82f6;">🐳 Docker</span>' : s.control_type === 'systemctl' ? '<span style="color:#a78bfa;">⚙ systemctl</span>' : '<span class="muted">sub-port</span>'}</td>
+              <td><div style="display:flex;gap:4px;align-items:center;">${actionBtn}</div></td>
+            </tr>`;
+          }).join('');
+
+          // Services Pills — use /api/services data
+          document.getElementById('servicePillsContainer').innerHTML = svcs.map(s => {
+            const isRunning = s.status === 'running';
+            const isSub = s.id === 'stalwart-smtps' || s.id === 'stalwart-imap';
+            if (isSub) return ''; // skip sub-ports from pills
+            let color, bg, label;
+            if ((s.category === 'game' || s.category === 'legacy') && !isRunning) { color=s.category === 'legacy' ? '#f97316' : '#64748b'; bg=s.category === 'legacy' ? 'rgba(249,115,22,0.08)' : 'rgba(100,116,139,0.08)'; label=s.category === 'legacy' ? 'STOPPED' : 'IDLE'; }
+            else if (s.category === 'mail' && !isRunning) { color='#f59e0b'; bg='rgba(245,158,11,0.08)'; label='STOPPED'; }
+            else if (isRunning) { color='#10b981'; bg='rgba(16,185,129,0.1)'; label='RUNNING'; }
+            else { color='#ef4444'; bg='rgba(239,68,68,0.1)'; label='OFFLINE'; }
+            return `<div class="service-pill" style="background:${bg};border:1px solid ${color}40;color:${color};">
+              <span style="width:7px;height:7px;border-radius:50%;background:${color};display:inline-block;"></span>
+              <span style="color:#fff;">${s.name} (${s.port})</span>
+              <span style="font-size:10px;font-weight:800;">${label}</span>
+            </div>`;
+          }).filter(Boolean).join('');
+
+          // Stalwart dot indicators
+          const stallAdmin = svcs.find(s => s.id === 'stalwart-mail');
+          const stallSmtps = svcs.find(s => s.id === 'stalwart-smtps');
+          const stallImap  = svcs.find(s => s.id === 'stalwart-imap');
+          const setDot = (id, svc) => {
+            const el = document.getElementById(id); if (!el || !svc) return;
+            const on = svc.status === 'running';
+            el.style.background = on ? '#10b981' : '#f59e0b';
+            el.title = on ? 'Running' : 'Not running — check Stalwart Admin';
+          };
+          setDot('stallAdminDot', stallAdmin);
+          setDot('stallSmtpsDot', stallSmtps);
+          setDot('stallImapsDot', stallImap);
+        }
+      } catch(e) { console.error('Services fetch error', e); }
+
+      // Errors
+      document.getElementById('sshBlocksCount').innerText = data.errors24h.sshAuthFailures || 0;
+      document.getElementById('totalIncidentsCount').innerText = data.errors24h.totalErrorCount || 0;
+      
+      let errorsHtml = '';
+      if (data.errors24h.systemd.length > 0) {
+        errorsHtml += `<div style="margin-bottom:10px;"><strong style="color:#f59e0b;font-size:12px;">Systemd Error Log (${data.errors24h.systemd.length} entries):</strong><pre class="debug-console" style="color:#ef4444;max-height:140px;">${data.errors24h.systemd.join('\n')}</pre></div>`;
+      }
+      if (data.errors24h.nginx.length > 0) {
+        errorsHtml += `<div style="margin-bottom:10px;"><strong style="color:#f59e0b;font-size:12px;">Nginx Error Log (${data.errors24h.nginx.length} entries):</strong><pre class="debug-console" style="color:#fca5a5;max-height:140px;">${data.errors24h.nginx.join('\n')}</pre></div>`;
+      }
+      if (data.errors24h.pm2.length > 0) {
+        errorsHtml += `<div><strong style="color:#f59e0b;font-size:12px;">PM2 Error Logs:</strong>`;
+        data.errors24h.pm2.forEach(p => {
+          errorsHtml += `<div style="font-size:11px;color:#94a3b8;margin-top:4px;">${p.file}:</div><pre class="debug-console" style="color:#fca5a5;max-height:100px;">${p.lines.join('\n')}</pre>`;
+        });
+        errorsHtml += '</div>';
+      }
+      if (!errorsHtml) {
+        errorsHtml = '<div style="color:#10b981; padding: 10px; background: rgba(16,185,129,0.08); border-radius:6px;">✓ Zero critical system errors logged in the past 24 hours.</div>';
+      }
+      document.getElementById('healthErrorsContainer').innerHTML = errorsHtml;
+    }
+
+    async function sendReportNow() {
+      const btn = document.getElementById('btnSendReport');
+      const spinner = document.getElementById('sendSpinner');
+      const recipient = document.getElementById('reportRecipient').value.trim();
+
+      if (btn) btn.disabled = true;
+      if (spinner) spinner.style.display = 'inline-block';
+      log(`Sending health report email to ${recipient || 'configured email'}...`);
+
+      try {
+        const res = await api('/api/health-report/send', 'POST', { recipient });
+        if (res.success) {
+          alert(`Success! Health report email dispatched from reports@faizal.uk to ${res.recipient}!\nMessage ID: ${res.messageId}`);
+          loadHealthData();
+        } else {
+          alert(`Failed to send report email: ${res.error}`);
+        }
+      } catch (err) {
+        alert(`Error triggering report: ${err.message}`);
+      } finally {
+        if (btn) btn.disabled = false;
+        if (spinner) spinner.style.display = 'none';
+      }
+    }
+
+    async function saveReportSettings() {
+      const recipient = document.getElementById('reportRecipient').value.trim();
+      const enabled = document.getElementById('reportEnabledSwitch').checked;
+      const time = document.getElementById('reportTime').value.trim();
+
+      try {
+        const res = await api('/api/health-report/config', 'POST', { recipient, enabled, time });
+        if (res.success) {
+          alert('Report settings saved!');
+          loadHealthData();
+        } else {
+          alert('Failed to save settings');
+        }
+      } catch (e) {
+        alert('Error saving settings: ' + e.message);
+      }
+    }
+
+    async function openReportPreview() {
+      const modal = document.getElementById('reportModal');
+      const iframe = document.getElementById('reportPreviewIframe');
+      modal.style.display = 'flex';
+      iframe.srcdoc = '<div style="color:#d4af37;padding:30px;font-family:sans-serif;text-align:center;">Compiling live HTML report preview...</div>';
+      try {
+        const res = await fetch('/api/health-report/preview', {
+          headers: { 'Authorization': auth }
+        });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const html = await res.text();
+        iframe.srcdoc = html;
+      } catch (err) {
+        iframe.srcdoc = `<div style="color:#ef4444;padding:30px;font-family:sans-serif;">Failed to load report preview: ${err.message}</div>`;
+      }
+    }
+
+    function closeReportPreview() {
+      document.getElementById('reportModal').style.display = 'none';
+    }
+
+    setInterval(() => { if(auth) loadAll(); }, 10000);
+  </script>
+</body>
+</html>

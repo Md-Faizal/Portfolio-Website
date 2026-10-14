@@ -90,7 +90,7 @@ export default function ClusterTab({ cluster, onOpenReportPreview }) {
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="text-base sm:text-lg font-bold text-white leading-tight">
-                  Master Core // {master.node || 'my-mac'}
+                  Node 01 // Primary Core // {master.node || 'my-mac'}
                 </h3>
                 <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-[#89ff00]/15 text-[#89ff00] border border-[#89ff00]/30">
                   ONLINE
@@ -110,7 +110,7 @@ export default function ClusterTab({ cluster, onOpenReportPreview }) {
             subvalue={`${master.cpu?.cores || 1} Cores Active`}
             percent={masterCpu}
             icon={Cpu}
-            badge="MASTER"
+            badge="PRIMARY"
           />
           <MetricCard
             title="Memory Allocation"
@@ -149,14 +149,14 @@ export default function ClusterTab({ cluster, onOpenReportPreview }) {
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="text-base sm:text-lg font-bold text-white leading-tight">
-                  Worker Probe // {slave.node || 'container-of-souls'}
+                  Node 02 // Standby Node // {slave.node || 'container-of-souls'}
                 </h3>
                 <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-sky-500/15 text-sky-400 border border-sky-500/30">
                   {slave.status?.toUpperCase() || 'ONLINE'}
                 </span>
               </div>
               <p className="text-xs font-mono text-neutral-400 mt-0.5">
-                IP: <strong className="text-white">{slave.ip || '10.0.0.195'}</strong> &bull; OS: {slave.os || 'Ubuntu 26.04 LTS'} &bull; Role: Compute & Background Workers
+                IP: <strong className="text-white">{slave.ip || '10.0.0.195'}</strong> &bull; OS: {slave.os || 'Ubuntu 26.04 LTS'} &bull; Role: Standby & On-Demand Services
               </p>
             </div>
           </div>
@@ -169,7 +169,7 @@ export default function ClusterTab({ cluster, onOpenReportPreview }) {
             subvalue={`${slave.cpu?.cores || 2} Cores Active`}
             percent={slaveCpu}
             icon={Cpu}
-            badge="SLAVE"
+            badge="STANDBY"
             badgeColor="sky"
           />
           <MetricCard
@@ -203,3 +203,4 @@ export default function ClusterTab({ cluster, onOpenReportPreview }) {
     </div>
   );
 }
+

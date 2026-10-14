@@ -55,6 +55,20 @@ pub struct DockerContainer {
     pub memory: String,
     pub net_io: String,
     pub ports: String,
+    pub size: String,
+    pub created: String,
+    pub network: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct DockerImageItem {
+    pub repository: String,
+    pub tag: String,
+    pub id: String,
+    pub size: String,
+    pub created: String,
+    pub containers: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -112,6 +126,7 @@ pub struct SystemHealthData {
     pub disk: DiskData,
     pub slave: Option<serde_json::Value>,
     pub docker: Vec<DockerContainer>,
+    pub docker_images: Vec<DockerImageItem>,
     pub docker_summary: DockerSummary,
     pub services: Vec<ServiceProbe>,
     pub errors24h: Errors24h,
@@ -327,7 +342,41 @@ pub async fn collect_system_health(db: &DbPool) -> SystemHealthData {
                     memory: "0B".into(),
                     net_io: "0B / 0B".into(),
                     ports: c["Ports"].as_str().unwrap_or("").to_string(),
+                    size: c["Size"].as_str().unwrap_or("N/A").to_string(),
+                    created: c["RunningFor"].as_str().or_else(|| c["CreatedAt"].as_str()).unwrap_or("").to_string(),
+                    network: c["Networks"].as_str().unwrap_or("bridge").to_string(),
                 });
+            }
+        }
+    }
+
+    // Docker Images Catalog
+    let mut docker_images = Vec::new();
+    let images_stdout = if cfg!(target_os = "windows") {
+        run_cmd("docker images --format \"{{json .}}\"")
+    } else {
+        Command::new("docker")
+            .args(["images", "--format", "{{json .}}"])
+            .output()
+            .ok()
+            .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+    };
+
+    if let Some(stdout) = images_stdout {
+        for line in stdout.lines() {
+            if let Ok(img) = serde_json::from_str::<serde_json::Value>(line) {
+                let repo = img["Repository"].as_str().unwrap_or("").to_string();
+                let tag = img["Tag"].as_str().unwrap_or("").to_string();
+                if !repo.is_empty() && repo != "<none>" {
+                    docker_images.push(DockerImageItem {
+                        repository: repo,
+                        tag,
+                        id: img["ID"].as_str().unwrap_or("").to_string(),
+                        size: img["Size"].as_str().unwrap_or("").to_string(),
+                        created: img["CreatedSince"].as_str().or_else(|| img["CreatedAt"].as_str()).unwrap_or("").to_string(),
+                        containers: img["Containers"].as_str().unwrap_or("0").to_string(),
+                    });
+                }
             }
         }
     }
@@ -463,13 +512,13 @@ pub async fn collect_system_health(db: &DbPool) -> SystemHealthData {
 
     if let Some(ref slave) = slave_data {
         if slave.get("status").and_then(|s| s.as_str()) != Some("online") {
-            health_issues.push("Cluster Slave Node (container-of-souls) is unreachable or degraded!".into());
+            health_issues.push("Cluster Standby Node (container-of-souls) is unreachable or degraded!".into());
             if overall_status == "HEALTHY" {
                 overall_status = "WARNING".into();
             }
         }
     } else {
-        health_issues.push("Cluster Slave Node probe unreachable via 127.0.0.1:9100 tunnel!".into());
+        health_issues.push("Cluster Standby Node probe unreachable via 127.0.0.1:9100 tunnel!".into());
         if overall_status == "HEALTHY" {
             overall_status = "WARNING".into();
         }
@@ -513,6 +562,7 @@ pub async fn collect_system_health(db: &DbPool) -> SystemHealthData {
         },
         slave: slave_data,
         docker: docker_list,
+        docker_images,
         docker_summary,
         services,
         errors24h: Errors24h {
@@ -610,7 +660,7 @@ pub fn generate_report_html(data: &SystemHealthData) -> String {
             r#"<div class="card">
                 <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:14px;">
                     <div>
-                        <div style="font-family:monospace; font-size:11px; font-weight:700; color:#89ff00; letter-spacing:0.12em; text-transform:uppercase;">NODE 02 // WORKER & COMPUTE SLAVE</div>
+                        <div style="font-family:monospace; font-size:11px; font-weight:700; color:#89ff00; letter-spacing:0.12em; text-transform:uppercase;">NODE 02 // STANDBY CLUSTER NODE</div>
                         <h3 style="color:#ffffff; font-size:17px; margin-top:2px;">container-of-souls (10.0.0.195 / 129.154.32.125)</h3>
                         <div style="font-size:11px; font-family:monospace; color:#94a3b8; margin-top:3px;">Platform: {} &bull; Uptime: {}</div>
                     </div>
@@ -646,7 +696,7 @@ pub fn generate_report_html(data: &SystemHealthData) -> String {
                 </table>
 
                 <div style="border-top:1px solid rgba(255,255,255,0.06); padding-top:12px;">
-                    <div style="font-family:monospace; font-size:11px; color:#94a3b8; margin-bottom:8px; text-transform:uppercase;">Slave Native Daemons:</div>
+                    <div style="font-family:monospace; font-size:11px; color:#94a3b8; margin-bottom:8px; text-transform:uppercase;">Standby Node Services:</div>
                     <div>{}</div>
                 </div>
             </div>"#,
@@ -661,9 +711,9 @@ pub fn generate_report_html(data: &SystemHealthData) -> String {
         r#"<div class="card" style="border-color: rgba(255, 51, 102, 0.3);">
             <div style="display:flex; justify-content:space-between; align-items:center;">
                 <div>
-                    <div style="font-family:monospace; font-size:11px; font-weight:700; color:#ff3366; letter-spacing:0.12em; text-transform:uppercase;">NODE 02 // WORKER & COMPUTE SLAVE</div>
+                    <div style="font-family:monospace; font-size:11px; font-weight:700; color:#ff3366; letter-spacing:0.12em; text-transform:uppercase;">NODE 02 // STANDBY CLUSTER NODE</div>
                     <h3 style="color:#ffffff; font-size:17px; margin-top:2px;">container-of-souls (10.0.0.195)</h3>
-                    <div style="font-size:11px; font-family:monospace; color:#94a3b8; margin-top:3px;">Slave probe offline or unreachable across private VCN tunnel</div>
+                    <div style="font-size:11px; font-family:monospace; color:#94a3b8; margin-top:3px;">Standby node probe offline or unreachable across private VCN tunnel</div>
                 </div>
                 <span class="badge" style="background:rgba(255,51,102,0.15); color:#ff3366; border:1px solid rgba(255,51,102,0.4);">
                     <span style="display:inline-block; width:6px; height:6px; border-radius:50%; background:#ff3366; margin-right:6px;"></span>
@@ -673,33 +723,114 @@ pub fn generate_report_html(data: &SystemHealthData) -> String {
         </div>"#.to_string()
     };
 
-    // Docker Rows
+    // Docker Containers Detailed Rows
     let docker_rows = data.docker.iter().map(|c| {
         let is_healthy = c.health == "healthy" || (c.state == "running" && c.health == "none");
         let color = if is_healthy { "#89ff00" } else { "#ff3366" };
+        let health_label = if c.health == "healthy" {
+            "RUNNING // HEALTHY"
+        } else if c.state == "running" {
+            "RUNNING"
+        } else {
+            "STOPPED"
+        };
+        let net_info = if !c.ports.is_empty() {
+            c.ports.clone()
+        } else {
+            format!("net: {}", c.network)
+        };
+
         format!(
             r#"<tr style="border-bottom: 1px solid rgba(255, 255, 255, 0.06);">
-                <td style="padding: 10px 12px; font-weight: 600; color: #ffffff; font-family: monospace; font-size: 13px;">{}</td>
-                <td style="padding: 10px 12px; color: #94a3b8; font-family: monospace; font-size: 12px;">{}</td>
-                <td style="padding: 10px 12px;"><span style="display:inline-flex; align-items:center; padding: 3px 8px; border-radius: 6px; font-size: 11px; font-weight: 700; font-family: monospace; background: rgba(255,255,255,0.04); color: {}; border: 1px solid rgba(255,255,255,0.08);"><span style="display:inline-block; width:6px; height:6px; border-radius:50%; background:{}; margin-right:6px;"></span>{}</span></td>
-                <td style="padding: 10px 12px; color: #cbd5e1; font-family: monospace; font-size: 12px;">{}</td>
+                <td style="padding: 12px 10px; vertical-align: top;">
+                    <div style="font-weight: 700; color: #ffffff; font-family: monospace; font-size: 13px;">{}</div>
+                    <div style="font-size: 10px; font-family: monospace; color: #64748b; margin-top: 3px;">ID: {} &bull; {}</div>
+                </td>
+                <td style="padding: 12px 10px; vertical-align: top;">
+                    <div style="color: #cbd5e1; font-family: monospace; font-size: 12px; font-weight: 600;">{}</div>
+                    <div style="font-size: 10px; font-family: monospace; color: #94a3b8; margin-top: 3px;">Footprint: {}</div>
+                </td>
+                <td style="padding: 12px 10px; vertical-align: top;">
+                    <span style="display:inline-flex; align-items:center; padding: 3px 8px; border-radius: 6px; font-size: 10px; font-weight: 800; font-family: monospace; background: rgba(255,255,255,0.03); color: {}; border: 1px solid rgba(255,255,255,0.08);">
+                        <span style="display:inline-block; width:6px; height:6px; border-radius:50%; background:{}; margin-right:6px;"></span>
+                        {}
+                    </span>
+                    <div style="font-size: 10px; font-family: monospace; color: #64748b; margin-top: 3px;">{}</div>
+                </td>
+                <td style="padding: 12px 10px; vertical-align: top; color: #94a3b8; font-family: monospace; font-size: 11px;">
+                    <div>{}</div>
+                </td>
             </tr>"#,
-            c.name, c.image, color, color, c.state.to_uppercase(), c.ports
+            c.name, c.id, c.created,
+            c.image, c.size,
+            color, color, health_label, c.status,
+            net_info
         )
     }).collect::<Vec<_>>().join("");
 
-    // Services Probes Matrix
-    let service_pills = data.services.iter().map(|s| {
-        let is_up = s.status == "running" || s.status == "active";
-        let color = if is_up { "#89ff00" } else { "#ff3366" };
+    // Docker Images Catalog Rows
+    let docker_images_rows = data.docker_images.iter().map(|img| {
         format!(
-            r#"<span style="display:inline-flex; align-items:center; margin-right:8px; margin-bottom:8px; padding:6px 12px; border-radius:8px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); font-family:monospace; font-size:12px; color:#f8fafc;">
-                <span style="display:inline-block; width:6px; height:6px; border-radius:50%; background:{}; margin-right:8px;"></span>
-                {} :{} &bull; <strong style="color:{}; margin-left:4px;">{}</strong>
-            </span>"#,
-            color, s.name, s.port, color, s.status.to_uppercase()
+            r#"<tr style="border-bottom: 1px solid rgba(255, 255, 255, 0.04);">
+                <td style="padding: 8px 10px; font-family: monospace; font-size: 12px; color: #ffffff; font-weight: 600;">
+                    {}:<span style="color:#89ff00;">{}</span>
+                </td>
+                <td style="padding: 8px 10px; font-family: monospace; font-size: 11px; color: #94a3b8;">{}</td>
+                <td style="padding: 8px 10px; font-family: monospace; font-size: 11px; color: #cbd5e1; font-weight: 700;">{}</td>
+                <td style="padding: 8px 10px; font-family: monospace; font-size: 11px; color: #64748b;">{}</td>
+                <td style="padding: 8px 10px; font-family: monospace; font-size: 11px; color: #94a3b8; text-align: center;">{}</td>
+            </tr>"#,
+            img.repository, img.tag, img.id, img.size, img.created, img.containers
         )
     }).collect::<Vec<_>>().join("");
+
+    // Services Probes Matrix - Guaranteed Green for ONLINE & email-safe table grid
+    let mut services_cells = Vec::new();
+    for s in &data.services {
+        let is_up = s.status.eq_ignore_ascii_case("online") || s.status.eq_ignore_ascii_case("running") || s.status.eq_ignore_ascii_case("active");
+        let is_standby = s.name.contains("CS Panel") || s.name.contains("Minecraft") || s.name.contains("Nexus");
+
+        let (dot_c, text_c, bg_c, border_c, label) = if is_up {
+            ("#89ff00", "#89ff00", "rgba(137, 255, 0, 0.12)", "rgba(137, 255, 0, 0.35)", "ONLINE")
+        } else if is_standby {
+            ("#64748b", "#94a3b8", "rgba(255, 255, 255, 0.04)", "rgba(255, 255, 255, 0.08)", "STANDBY")
+        } else {
+            ("#ff3366", "#ff3366", "rgba(255, 51, 102, 0.15)", "rgba(255, 51, 102, 0.4)", "OFFLINE")
+        };
+
+        services_cells.push(format!(
+            r#"<td style="width:50%; padding:4px; vertical-align:middle;">
+                <table style="width:100%; margin:0; border:1px solid rgba(255,255,255,0.06); background:#070709; border-radius:8px; padding:8px 10px;">
+                    <tr>
+                        <td style="font-family:monospace; font-size:11px; color:#f8fafc; vertical-align:middle; white-space:nowrap;">
+                            <span style="display:inline-block; width:7px; height:7px; border-radius:50%; background:{}; margin-right:6px; vertical-align:middle;"></span>
+                            {} <span style="color:#64748b;">:{}</span>
+                        </td>
+                        <td style="text-align:right; vertical-align:middle;">
+                            <span style="display:inline-block; padding:2px 8px; border-radius:4px; font-family:monospace; font-size:10px; font-weight:800; color:{}; background:{}; border:1px solid {};">
+                                {}
+                            </span>
+                        </td>
+                    </tr>
+                </table>
+            </td>"#,
+            dot_c, s.name, s.port, text_c, bg_c, border_c, label
+        ));
+    }
+
+    let mut service_grid = String::new();
+    service_grid.push_str("<table style=\"width:100%; border:none; margin:0; border-collapse:collapse;\">");
+    for chunk in services_cells.chunks(2) {
+        service_grid.push_str("<tr>");
+        for cell in chunk {
+            service_grid.push_str(cell);
+        }
+        if chunk.len() == 1 {
+            service_grid.push_str("<td style=\"width:50%; padding:4px;\"></td>");
+        }
+        service_grid.push_str("</tr>");
+    }
+    service_grid.push_str("</table>");
 
     format!(
         r##"<!DOCTYPE html>
@@ -726,19 +857,35 @@ h2, h3 {{ margin: 0; font-weight: 700; letter-spacing: -0.02em; }}
 </head>
 <body>
 <div class="container">
-    <!-- Brand & Executive Header -->
+    <!-- Brand & Executive Header with FZ Monogram -->
     <div class="header-card">
-        <div style="font-family: monospace; font-size: 11px; font-weight: 700; color: #89ff00; letter-spacing: 0.18em; text-transform: uppercase; margin-bottom: 6px;">
-            MOHAMMAD FAIZAL // ATELIER CLUSTER
-        </div>
-        <h2 style="color: #ffffff; font-size: 22px; font-weight: 700; margin-bottom: 8px;">
-            24h System Health & Supervision Report
-        </h2>
-        <div style="font-size: 12px; font-family: monospace; color: #94a3b8; line-height: 1.5;">
-            Master: {} (10.0.0.86) &bull; Platform: {} &bull; Uptime: {}
-        </div>
-        <div style="margin-top: 16px;">
-            <span class="badge" style="background: {}; color: {}; border: 1px solid {};">
+        <table style="width:100%; border:none; margin:0; padding:0;">
+            <tr>
+                <td style="width:62px; vertical-align:middle; padding-right:16px;">
+                    <div style="background:#050507; border:1px solid rgba(137,255,0,0.35); border-radius:12px; padding:10px 12px; text-align:center; box-shadow:0 0 20px rgba(137,255,0,0.12);">
+                        <svg viewBox="0 0 171.63 91" width="52" height="27" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:block; margin:0 auto;">
+                            <path d="M43.82,70.3l64.52.05,5.42-12.76-32.78-.36,41.09-19.08,7.56-18.43,27.69.85-25.84,61.15c-2.63,6.23-11.43,8.64-18.18,8.65l-111.12.13,41.64-20.2Z" fill="#ff3366" />
+                            <path d="M129.63,19.71l-65.22.74-5.49,12.65,32.87.55-41.14,19.05-6.83,17.6-28.38-.02L41.22,9.13C43.67,3.32,52.08.55,58.48.55l110.96-.05-39.82,19.21Z" fill="#89ff00" />
+                            <polygon points="44.55 69.8 51.04 53.07 93.98 33.19 59.67 32.61 64.74 20.95 128.88 20.22 121.68 37.77 78.77 57.7 113 58.08 108.01 69.85 44.55 69.8" fill="#111113" />
+                            <path d="M128.13,20.73l-6.84,16.67-40.73,18.92-4,1.86,4.41.05,31.28.34-4.57,10.78-62.4-.05,6.16-15.86,40.77-18.88,3.96-1.83-4.36-.07-31.37-.53,4.64-10.68,63.06-.71M129.63,19.71l-65.22.74-5.49,12.65,32.87.55-41.14,19.05-6.83,17.6,64.52.05,5.42-12.76-32.78-.36,41.09-19.08,7.56-18.43h0Z" fill="#ffffff" />
+                        </svg>
+                    </div>
+                </td>
+                <td style="vertical-align:middle;">
+                    <div style="font-family:monospace; font-size:11px; font-weight:700; color:#89ff00; letter-spacing:0.18em; text-transform:uppercase; margin-bottom:4px;">
+                        MOHAMMAD FAIZAL // ATELIER CLUSTER
+                    </div>
+                    <h2 style="color:#ffffff; font-size:20px; font-weight:700; margin:0 0 4px 0; letter-spacing:-0.02em;">
+                        24h System Health &amp; Supervision Report
+                    </h2>
+                    <div style="font-size:11px; font-family:monospace; color:#94a3b8; line-height:1.4;">
+                        Master: {} (10.0.0.86) &bull; Platform: {} &bull; Uptime: {}
+                    </div>
+                </td>
+            </tr>
+        </table>
+        <div style="margin-top:16px;">
+            <span class="badge" style="background:{}; color:{}; border:1px solid {};">
                 <span style="display:inline-block; width:6px; height:6px; border-radius:50%; background:{}; margin-right:8px;"></span>
                 {}
             </span>
@@ -792,26 +939,48 @@ h2, h3 {{ margin: 0; font-weight: 700; letter-spacing: -0.02em; }}
         </table>
     </div>
 
-    <!-- Node 02: Slave Worker (container-of-souls) -->
+    <!-- Node 02: Standby Node (container-of-souls) -->
     {}
 
-    <!-- Docker Services -->
+    <!-- Docker Orchestration & Image Registry -->
     <div class="card">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-            <h3 style="color: #ffffff; font-size: 16px;">Production Docker Units ({})</h3>
-            <span style="font-family:monospace; font-size:11px; color:#89ff00;">MASTER WORKLOAD</span>
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+            <div>
+                <h3 style="color: #ffffff; font-size: 16px;">Docker Orchestration &amp; Virtual Units ({})</h3>
+                <div style="font-size: 11px; font-family: monospace; color: #94a3b8; margin-top: 2px;">Primary container runtime environment</div>
+            </div>
+            <span class="badge" style="background:rgba(137,255,0,0.1); color:#89ff00; border:1px solid rgba(137,255,0,0.3);">
+                DOCKER ENGINE
+            </span>
         </div>
         <table>
-            <thead><tr><th>Container</th><th>Image</th><th>Status</th><th>Network Mapping</th></tr></thead>
+            <thead><tr><th>Container Unit</th><th>Image &amp; Footprint</th><th>Health &amp; Status</th><th>Network &amp; Ports</th></tr></thead>
             <tbody>{}</tbody>
         </table>
+
+        <!-- Docker Image Catalog -->
+        <div style="margin-top: 20px; border-top: 1px solid rgba(255,255,255,0.06); padding-top: 16px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 8px;">
+                <div style="font-family:monospace; font-size:11px; font-weight:700; color:#89ff00; text-transform:uppercase; letter-spacing:0.08em;">
+                    Docker Image Catalog ({})
+                </div>
+                <div style="font-family:monospace; font-size:10px; color:#64748b;">HOST IMAGE CACHE</div>
+            </div>
+            <table>
+                <thead><tr><th>Repository &amp; Tag</th><th>Image ID</th><th>Virtual Size</th><th>Created</th><th style="text-align:center;">Containers</th></tr></thead>
+                <tbody>{}</tbody>
+            </table>
+        </div>
     </div>
 
     <!-- Active Network Services Matrix -->
     <div class="card">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-            <h3 style="color: #ffffff; font-size: 16px;">Network Services & Port Probes</h3>
-            <span style="font-family:monospace; font-size:11px; color:#94a3b8;">CORE DAEMONS</span>
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+            <div>
+                <h3 style="color: #ffffff; font-size: 16px;">Network Services &amp; Port Probes</h3>
+                <div style="font-size: 11px; font-family: monospace; color: #94a3b8; margin-top: 2px;">Real-time TCP socket listeners on host</div>
+            </div>
+            <span style="font-family:monospace; font-size:11px; color:#89ff00; font-weight:700;">TCP SOCKETS</span>
         </div>
         <div>{}</div>
     </div>
@@ -859,7 +1028,8 @@ h2, h3 {{ margin: 0; font-weight: 700; letter-spacing: -0.02em; }}
         disk_pct, format_bytes(data.disk.used_bytes), format_bytes(data.disk.total_bytes), disk_pct, disk_bar_color,
         slave_section,
         data.docker.len(), docker_rows,
-        service_pills,
+        data.docker_images.len(), docker_images_rows,
+        service_grid,
         data.analytics24h.views, data.analytics24h.unique_visitors, data.analytics24h.messages_received
     )
 }
@@ -931,3 +1101,4 @@ pub async fn run_scheduled_reporter(config: AppConfig, db: DbPool) {
         }
     }
 }
+

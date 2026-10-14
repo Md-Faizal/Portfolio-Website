@@ -10,6 +10,7 @@ personal-site-rust
 # Production builds
 dist/
 frontend/dist/
+frontend/dist-admin/
 
 # Logs and environment
 *.log

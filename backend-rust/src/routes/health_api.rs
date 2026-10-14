@@ -67,10 +67,10 @@ async fn fetch_slave_stats() -> serde_json::Value {
 
     serde_json::json!({
         "node": "container-of-souls",
-        "role": "Slave (Compute & Workers)",
+        "role": "Standby (Compute & On-Demand Services)",
         "ip": "10.0.0.195",
         "status": "offline",
-        "error": "Slave probe unreachable on 127.0.0.1:9100"
+        "error": "Standby probe unreachable on 127.0.0.1:9100"
     })
 }
 
@@ -107,9 +107,15 @@ pub async fn get_system_stats(
     });
 
     let slave_stats = fetch_slave_stats().await;
+    let node_role = std::env::var("NODE_ROLE").unwrap_or_else(|_| "primary".into());
+    let current_node_role_label = if node_role == "standby" {
+        "Standby (Compute & Ingress)"
+    } else {
+        "Primary (Stateful Core & Ingress)"
+    };
     let master_stats = serde_json::json!({
         "node": "my-mac",
-        "role": "Master (Stateful Core & Ingress)",
+        "role": current_node_role_label,
         "ip": "10.0.0.86",
         "status": "online",
         "os": "Ubuntu 24.04.5 LTS",
