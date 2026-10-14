@@ -164,6 +164,7 @@ jobs:
       - name: "📦 Package Compressed Swarm Release Bundle"
         run: |
           chmod +x ./personal-site-rust
+          chmod -R a+rX public frontend/dist
           # Package everything into a single compressed bundle for sub-second WAN transfer
           tar -czf release.tar.gz personal-site-rust Dockerfile docker-compose.yml frontend/dist public
           ls -lh release.tar.gz
@@ -224,6 +225,10 @@ jobs:
           tar -xzf release.tar.gz
           rm -f release.tar.gz
 
+          # Ensure public web assets are world-readable and directories traversable for Nginx (www-data)
+          chmod -R a+rX "$TARGET_DIR/public" "$TARGET_DIR/frontend/dist" 2>/dev/null || true
+          chmod a+rx "$TARGET_DIR" /home/ubuntu /home/ubuntu/stack /home/ubuntu/stack/apps 2>/dev/null || true
+
           # Ensure the standby probe SSH tunnel is active
           systemctl is-active --quiet cos-tunnel.service || sudo systemctl restart cos-tunnel.service || true
 
@@ -264,6 +269,8 @@ jobs:
             cd "$TARGET_DIR"
             mv -f personal-site-rust.tmp personal-site-rust
             chmod +x personal-site-rust
+            chmod -R a+rX "$TARGET_DIR/public" "$TARGET_DIR/frontend/dist" 2>/dev/null || true
+            chmod a+rx "$TARGET_DIR" /home/ubuntu /home/ubuntu/stack /home/ubuntu/stack/apps 2>/dev/null || true
             mkdir -p backend
             touch backend/messages.db
             NODE_ROLE=standby docker compose up -d --build --remove-orphans
