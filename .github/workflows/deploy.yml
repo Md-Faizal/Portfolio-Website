@@ -194,13 +194,6 @@ jobs:
             Port 22
             StrictHostKeyChecking no
             UserKnownHostsFile /dev/null
-            PubkeyAcceptedKeyTypes +ssh-rsa,rsa-sha2-256,rsa-sha2-512
-            HostkeyAlgorithms +ssh-rsa,rsa-sha2-256,rsa-sha2-512
-            ControlMaster auto
-            ControlPath /tmp/cm-%r@%h:%p
-            ControlPersist 10m
-            ConnectTimeout 15
-            BatchMode yes
             ServerAliveInterval 30
             ServerAliveCountMax 3
           EOF
@@ -209,16 +202,16 @@ jobs:
           TARGET_DIR="/home/ubuntu/stack/apps/personal-site"
 
           echo "🚀 Syncing built binary, frontend dist, and configs to Primary Node ($TARGET_DIR)..."
-          ssh production "mkdir -p $TARGET_DIR/backend /home/ubuntu/stack/ops/ipc $TARGET_DIR/public $TARGET_DIR/frontend/dist"
+          ssh -n production "mkdir -p $TARGET_DIR/backend /home/ubuntu/stack/ops/ipc $TARGET_DIR/public $TARGET_DIR/frontend/dist"
 
           scp ./personal-site-rust production:$TARGET_DIR/personal-site-rust
           scp ./Dockerfile ./docker-compose.yml production:$TARGET_DIR/
 
-          rsync -avz --delete -e "ssh -F $HOME/.ssh/config -o BatchMode=yes" frontend/dist/ production:$TARGET_DIR/frontend/dist/
-          rsync -avz -e "ssh -F $HOME/.ssh/config -o BatchMode=yes" public/ production:$TARGET_DIR/public/
+          rsync -avz --delete frontend/dist/ production:$TARGET_DIR/frontend/dist/
+          rsync -avz public/ production:$TARGET_DIR/public/
 
           echo "🐳 Launching production container on my-mac..."
-          ssh production bash -s << 'REMOTESCRIPT'
+          ssh -n production bash -s << 'REMOTESCRIPT'
           set -e
           mkdir -p /home/ubuntu/stack/apps/personal-site/backend
           mkdir -p /home/ubuntu/stack/ops/ipc
@@ -270,13 +263,6 @@ jobs:
             Port 22
             StrictHostKeyChecking no
             UserKnownHostsFile /dev/null
-            PubkeyAcceptedKeyTypes +ssh-rsa,rsa-sha2-256,rsa-sha2-512
-            HostkeyAlgorithms +ssh-rsa,rsa-sha2-256,rsa-sha2-512
-            ControlMaster auto
-            ControlPath /tmp/cm-%r@%h:%p
-            ControlPersist 10m
-            ConnectTimeout 15
-            BatchMode yes
             ServerAliveInterval 30
             ServerAliveCountMax 3
           EOF
@@ -285,16 +271,16 @@ jobs:
           TARGET_DIR="/home/ubuntu/stack/apps/personal-site"
 
           echo "🚀 Deploying to Standby Node (cos) at $TARGET_DIR..."
-          ssh standby-cos "mkdir -p $TARGET_DIR/backend /home/ubuntu/stack/ops/ipc $TARGET_DIR/public $TARGET_DIR/frontend/dist"
+          ssh -n standby-cos "mkdir -p $TARGET_DIR/backend /home/ubuntu/stack/ops/ipc $TARGET_DIR/public $TARGET_DIR/frontend/dist"
 
           scp ./personal-site-rust standby-cos:$TARGET_DIR/personal-site-rust
           scp ./Dockerfile ./docker-compose.yml standby-cos:$TARGET_DIR/
 
-          rsync -avz --delete -e "ssh -F $HOME/.ssh/config -o BatchMode=yes" frontend/dist/ standby-cos:$TARGET_DIR/frontend/dist/
-          rsync -avz -e "ssh -F $HOME/.ssh/config -o BatchMode=yes" public/ standby-cos:$TARGET_DIR/public/
+          rsync -avz --delete frontend/dist/ standby-cos:$TARGET_DIR/frontend/dist/
+          rsync -avz public/ standby-cos:$TARGET_DIR/public/
 
           echo "🐳 Launching standby Docker container on cos..."
-          ssh standby-cos bash -s << 'REMOTESCRIPT'
+          ssh -n standby-cos bash -s << 'REMOTESCRIPT'
           set -e
           cd /home/ubuntu/stack/apps/personal-site
 
