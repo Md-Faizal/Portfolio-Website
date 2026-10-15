@@ -192,13 +192,11 @@ main() {
     active_port="$(get_port_for_slot "$active_slot")"
     standby_port="$(get_port_for_slot "$standby_slot")"
 
-    if [ -f "$HEARTBEAT_FILE" ]; then
-        heartbeat_age=$(( $(date +%s) - $(cat "$HEARTBEAT_FILE" 2>/dev/null || echo 0) ))
-        if [ "$heartbeat_age" -gt 180 ]; then
-            log "Deadman alarm: watchdog heartbeat is stale (${heartbeat_age}s)."
-            trigger_deadman_alert
-            exit 1
-        fi
+    # 0. Check for manual maintenance mode flag
+    local maintenance_flag="$STATE_DIR/maintenance_mode"
+    if [ -f "$maintenance_flag" ] || [ -f "$APP_DIR/state/maintenance_mode" ]; then
+        log "Maintenance mode flag detected. Skipping health checks and auto-recovery."
+        exit 0
     fi
 
     # 1. Check active slot

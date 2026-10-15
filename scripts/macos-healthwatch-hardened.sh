@@ -170,10 +170,12 @@ main() {
     write_heartbeat
     ensure_bridge_health
 
-    active_slot="$(get_active_slot)"
-    standby_slot="$(get_standby_slot)"
-    active_port="$(get_port_for_slot "$active_slot")"
-    standby_port="$(get_port_for_slot "$standby_slot")"
+    # 0. Check for manual maintenance mode flag
+    local maintenance_flag="$STATE_DIR/maintenance_mode"
+    if [ -f "$maintenance_flag" ] || [ -f "/home/ubuntu/MacOS-Production/state/maintenance_mode" ]; then
+        log "Maintenance mode flag detected. Skipping health checks and auto-recovery."
+        exit 0
+    fi
 
     if check_slot "$active_slot"; then
         write_count "$ACTIVE_FAILURES_FILE" 0
