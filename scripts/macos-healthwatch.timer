@@ -1,0 +1,11 @@
+[Unit]
+Description=Run MacOS upstream health watchdog every 45 seconds
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=45s
+Unit=macos-healthwatch.service
+AccuracySec=5s
+
+[Install]
+WantedBy=timers.target
