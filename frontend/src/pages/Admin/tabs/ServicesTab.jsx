@@ -17,14 +17,14 @@ import {
 import ServiceCard from '../components/ServiceCard';
 
 export default function ServicesTab({ services = [], onServiceAction, onRefresh, refreshing }) {
-  const [nodeFilter, setNodeFilter] = useState('all'); // 'all' | 'primary' | 'secondary' | 'both'
+  const [nodeFilter, setNodeFilter] = useState('all'); // 'all' | 'primary' | 'backup' | 'both'
   const [typeFilter, setTypeFilter] = useState('all'); // 'all' | 'docker' | 'systemctl'
   const [servingFilter, setServingFilter] = useState('all'); // 'all' | 'serving' | 'standby' | 'off'
 
   const getNodeCategory = (service) => {
     const node = (service.node || '').toLowerCase();
     if (node === 'both' || node === 'cluster') return 'both';
-    if (node === 'container-of-souls' || node === 'cos' || node === 'secondary') return 'secondary';
+    if (node === 'container-of-souls' || node === 'cos' || node === 'secondary' || node === 'backup') return 'backup';
     return 'primary';
   };
 
@@ -210,19 +210,19 @@ export default function ServicesTab({ services = [], onServiceAction, onRefresh,
             }`}
           >
             <Server className="w-3.5 h-3.5" />
-            <span>Primary VM ({primaryServices.length})</span>
+            <span>Primary Node ({primaryServices.length})</span>
           </button>
 
           <button
-            onClick={() => setNodeFilter('secondary')}
+            onClick={() => setNodeFilter('backup')}
             className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-mono transition-all cursor-pointer ${
-              nodeFilter === 'secondary'
+              nodeFilter === 'backup'
                 ? 'bg-sky-500/20 text-sky-400 font-bold border border-sky-500/40 shadow-sm'
                 : 'text-neutral-400 hover:text-sky-400 hover:bg-sky-500/5 border border-transparent'
             }`}
           >
             <Cpu className="w-3.5 h-3.5" />
-            <span>Secondary VM ({secondaryServices.length})</span>
+            <span>Backup Node ({secondaryServices.length})</span>
           </button>
 
           <button
@@ -234,7 +234,7 @@ export default function ServicesTab({ services = [], onServiceAction, onRefresh,
             }`}
           >
             <Layers className="w-3.5 h-3.5" />
-            <span>Both / Cluster ({bothServices.length})</span>
+            <span>Multi-Node / Cluster ({bothServices.length})</span>
           </button>
         </div>
 
@@ -324,7 +324,7 @@ export default function ServicesTab({ services = [], onServiceAction, onRefresh,
       </div>
 
       {/* ──────────────────────────────────────────────────────────── */}
-      {/* 1. PRIMARY VM (my-mac) */}
+      {/* 1. PRIMARY NODE */}
       {/* ──────────────────────────────────────────────────────────── */}
       {(nodeFilter === 'all' || nodeFilter === 'primary') && (
         <section className="space-y-4">
@@ -343,10 +343,10 @@ export default function ServicesTab({ services = [], onServiceAction, onRefresh,
               <div>
                 <div className="flex items-center gap-2.5 flex-wrap">
                   <h3 className="text-base sm:text-lg font-bold text-white tracking-tight leading-snug">
-                    Primary VM // my-mac
+                    Primary Node // Ingress & Core Fabric
                   </h3>
                   <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-[#89ff00]/15 text-[#89ff00] border border-[#89ff00]/30">
-                    MASTER CORE
+                    PRIMARY CORE
                   </span>
                   <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-medium bg-white/5 text-neutral-300 border border-white/10">
                     10.0.0.86
@@ -381,9 +381,9 @@ export default function ServicesTab({ services = [], onServiceAction, onRefresh,
       )}
 
       {/* ──────────────────────────────────────────────────────────── */}
-      {/* 2. SECONDARY VM (container-of-souls) */}
+      {/* 2. BACKUP NODE */}
       {/* ──────────────────────────────────────────────────────────── */}
-      {(nodeFilter === 'all' || nodeFilter === 'secondary') && (
+      {(nodeFilter === 'all' || nodeFilter === 'backup') && (
         <section className="space-y-4">
           <div
             className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-5 rounded-2xl backdrop-blur-md"
@@ -400,7 +400,7 @@ export default function ServicesTab({ services = [], onServiceAction, onRefresh,
               <div>
                 <div className="flex items-center gap-2.5 flex-wrap">
                   <h3 className="text-base sm:text-lg font-bold text-white tracking-tight leading-snug">
-                    Secondary VM // container-of-souls
+                    Backup Node // Standby & Compute Worker
                   </h3>
                   <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-sky-500/15 text-sky-400 border border-sky-500/30">
                     STANDBY & WORKER

@@ -243,6 +243,8 @@ pub async fn get_system_stats(
         "stats": {
             "os": os_stats,
             "cluster": {
+                "primary": master_stats.clone(),
+                "backup": slave_stats.clone(),
                 "master": master_stats,
                 "slave": slave_stats
             },

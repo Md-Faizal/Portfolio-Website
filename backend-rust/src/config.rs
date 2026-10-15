@@ -28,12 +28,18 @@ impl AppConfig {
         // ── Path resolution (env-var first, then sensible fallbacks) ──────────
         let db_path = PathBuf::from(
             std::env::var("DB_PATH").unwrap_or_else(|_| {
-                if std::path::Path::new("/app").exists() {
+                if PathBuf::from("/app/cluster_hub.db").exists() {
+                    "/app/cluster_hub.db".into()
+                } else if PathBuf::from("/app/messages.db").exists() {
                     "/app/messages.db".into()
+                } else if PathBuf::from("../backend/cluster_hub.db").exists() {
+                    "../backend/cluster_hub.db".into()
                 } else if PathBuf::from("../backend/messages.db").exists() {
                     "../backend/messages.db".into()
+                } else if PathBuf::from("cluster_hub.db").exists() {
+                    "cluster_hub.db".into()
                 } else {
-                    "messages.db".into()
+                    "cluster_hub.db".into()
                 }
             }),
         );

@@ -36,20 +36,20 @@ export default function Admin({ onExit }) {
 
   // Cluster State
   const [cluster, setCluster] = useState({
-    master: {
-      node: 'my-mac',
-      role: 'Master Core (Ingress & State)',
+    primary: {
+      node: 'Primary Node',
+      role: 'Primary Core (Ingress & State)',
       ip: '10.0.0.86',
       status: 'online',
-      os: 'Ubuntu 24.04.5 LTS',
+      os: 'Ubuntu 24.04 LTS',
       uptime: 0,
       cpu: { cores: 1, loadPercent: 12, loadAvg: [0.15, 0.18, 0.22] },
       memory: { totalBytes: 997474304, usedBytes: 420000000, freeBytes: 577474304, usedPercent: 42 },
       disk: { totalBytes: 50839412736, usedBytes: 18253611008, availBytes: 32585801728, usedPercent: 36 }
     },
-    slave: {
-      node: 'container-of-souls',
-      role: 'Worker Probe (Rust Compute)',
+    backup: {
+      node: 'Backup Node',
+      role: 'Standby & Compute Worker',
       ip: '10.0.0.195',
       status: 'online',
       os: 'Ubuntu 26.04 LTS',

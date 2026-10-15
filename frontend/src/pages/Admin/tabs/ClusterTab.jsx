@@ -4,8 +4,8 @@ import { Server, Cpu, HardDrive, Database, Activity, ExternalLink, ShieldCheck, 
 import MetricCard from '../components/MetricCard';
 
 export default function ClusterTab({ cluster, onOpenReportPreview }) {
-  const master = cluster?.master || {};
-  const slave = cluster?.slave || {};
+  const primary = cluster?.primary || cluster?.master || {};
+  const backup = cluster?.backup || cluster?.slave || {};
 
   const formatBytes = (bytes) => {
     if (!bytes || bytes === 0) return '0 B';
@@ -24,13 +24,13 @@ export default function ClusterTab({ cluster, onOpenReportPreview }) {
     return `${h}h ${m}m`;
   };
 
-  const masterCpu = master.cpu?.loadPercent ?? 0;
-  const masterMemUsed = master.memory?.usedPercent ?? 0;
-  const masterDiskUsed = master.disk?.usedPercent ?? 0;
+  const primaryCpu = primary.cpu?.loadPercent ?? 0;
+  const primaryMemUsed = primary.memory?.usedPercent ?? 0;
+  const primaryDiskUsed = primary.disk?.usedPercent ?? 0;
 
-  const slaveCpu = slave.cpu?.loadPercent ?? 0;
-  const slaveMemUsed = slave.memory?.usedPercent ?? 0;
-  const slaveDiskUsed = slave.disk?.usedPercent ?? 0;
+  const backupCpu = backup.cpu?.loadPercent ?? 0;
+  const backupMemUsed = backup.memory?.usedPercent ?? 0;
+  const backupDiskUsed = backup.disk?.usedPercent ?? 0;
 
   return (
     <div className="space-y-8" style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
@@ -49,14 +49,14 @@ export default function ClusterTab({ cluster, onOpenReportPreview }) {
           <div className="flex items-center gap-2 mb-1.5">
             <span className="w-2 h-2 rounded-full bg-[#89ff00] animate-pulse" />
             <span className="text-xs font-mono font-semibold text-[#89ff00] tracking-widest uppercase">
-              Dual-Node Cluster Telemetry
+              High-Availability Cluster Telemetry
             </span>
           </div>
           <h2 className="text-xl sm:text-2xl font-bold text-white tracking-tight">
-            High-Performance Micro-Infrastructure
+            Multi-Node Autonomous Infrastructure
           </h2>
           <p className="text-xs sm:text-sm text-neutral-400 mt-1 max-w-2xl leading-relaxed">
-            Autonomous private cluster running compiled Rust microservices, memory-capped Docker containers, and Cockpit 362 bridge telemetry.
+            Cloud-agnostic private cluster running compiled Rust microservices, memory-capped Docker containers, and live telemetry across primary and backup nodes.
           </p>
         </div>
 
@@ -74,13 +74,13 @@ export default function ClusterTab({ cluster, onOpenReportPreview }) {
             rel="noopener noreferrer"
             className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#89ff00]/10 hover:bg-[#89ff00]/20 border border-[#89ff00]/30 text-xs font-mono font-semibold text-[#89ff00] transition-all"
           >
-            <span>Cockpit 362</span>
+            <span>Cockpit Console</span>
             <ExternalLink className="w-3.5 h-3.5" />
           </a>
         </div>
       </div>
 
-      {/* NODE 1: MASTER */}
+      {/* NODE 1: PRIMARY */}
       <section className="space-y-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -90,14 +90,14 @@ export default function ClusterTab({ cluster, onOpenReportPreview }) {
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="text-base sm:text-lg font-bold text-white leading-tight">
-                  Node 01 // Primary Core // {master.node || 'my-mac'}
+                  Node 01 // Primary Node // {primary.node || 'Primary Core'}
                 </h3>
                 <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-[#89ff00]/15 text-[#89ff00] border border-[#89ff00]/30">
                   ONLINE
                 </span>
               </div>
               <p className="text-xs font-mono text-neutral-400 mt-0.5">
-                IP: <strong className="text-white">{master.ip || '10.0.0.86'}</strong> &bull; OS: {master.os || 'Ubuntu 24.04 LTS'} &bull; Uptime: {formatUptime(master.uptime)}
+                IP: <strong className="text-white">{primary.ip || '10.0.0.86'}</strong> &bull; OS: {primary.os || 'Ubuntu 24.04 LTS'} &bull; Uptime: {formatUptime(primary.uptime)}
               </p>
             </div>
           </div>
@@ -106,31 +106,31 @@ export default function ClusterTab({ cluster, onOpenReportPreview }) {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <MetricCard
             title="CPU Utilization"
-            value={`${masterCpu}%`}
-            subvalue={`${master.cpu?.cores || 1} Cores Active`}
-            percent={masterCpu}
+            value={`${primaryCpu}%`}
+            subvalue={`${primary.cpu?.cores || 1} Cores Active`}
+            percent={primaryCpu}
             icon={Cpu}
             badge="PRIMARY"
           />
           <MetricCard
             title="Memory Allocation"
-            value={formatBytes(master.memory?.usedBytes)}
-            subvalue={`Total: ${formatBytes(master.memory?.totalBytes)}`}
-            percent={masterMemUsed}
+            value={formatBytes(primary.memory?.usedBytes)}
+            subvalue={`Total: ${formatBytes(primary.memory?.totalBytes)}`}
+            percent={primaryMemUsed}
             icon={Activity}
-            badge={`${masterMemUsed}%`}
+            badge={`${primaryMemUsed}%`}
           />
           <MetricCard
-            title="NVMe Root Storage"
-            value={formatBytes(master.disk?.usedBytes)}
-            subvalue={`Free: ${formatBytes(master.disk?.availBytes)}`}
-            percent={masterDiskUsed}
+            title="Root Storage"
+            value={formatBytes(primary.disk?.usedBytes)}
+            subvalue={`Free: ${formatBytes(primary.disk?.availBytes)}`}
+            percent={primaryDiskUsed}
             icon={HardDrive}
-            badge={`${masterDiskUsed}%`}
+            badge={`${primaryDiskUsed}%`}
           />
           <MetricCard
             title="Load Average"
-            value={master.cpu?.loadAvg ? master.cpu.loadAvg.slice(0, 2).join(', ') : '0.12, 0.15'}
+            value={primary.cpu?.loadAvg ? primary.cpu.loadAvg.slice(0, 2).join(', ') : '0.12, 0.15'}
             subvalue="1m, 5m system load"
             icon={Database}
             badge="15m: 0.18"
@@ -139,7 +139,7 @@ export default function ClusterTab({ cluster, onOpenReportPreview }) {
         </div>
       </section>
 
-      {/* NODE 2: SLAVE */}
+      {/* NODE 2: BACKUP */}
       <section className="space-y-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -149,18 +149,18 @@ export default function ClusterTab({ cluster, onOpenReportPreview }) {
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="text-base sm:text-lg font-bold text-white leading-tight">
-                  Node 02 // Standby Node // {slave.node || 'container-of-souls'}
+                  Node 02 // Backup Node // {backup.node || 'Backup Worker'}
                 </h3>
                 <span className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-bold ${
-                  (slave.status || 'online').toLowerCase() === 'online'
+                  (backup.status || 'online').toLowerCase() === 'online'
                     ? 'bg-sky-500/15 text-sky-400 border border-sky-500/30'
                     : 'bg-red-500/15 text-red-400 border border-red-500/30'
                 }`}>
-                  {slave.status?.toUpperCase() || 'ONLINE'}
+                  {backup.status?.toUpperCase() || 'ONLINE'}
                 </span>
               </div>
               <p className="text-xs font-mono text-neutral-400 mt-0.5">
-                IP: <strong className="text-white">{slave.ip || '10.0.0.195'}</strong> &bull; OS: {slave.os || 'Ubuntu 24.04.5 LTS'} &bull; Role: Standby & On-Demand Services &bull; Uptime: {formatUptime(slave.uptime)}
+                IP: <strong className="text-white">{backup.ip || '10.0.0.195'}</strong> &bull; OS: {backup.os || 'Ubuntu 26.04 LTS'} &bull; Role: Standby & On-Demand Services &bull; Uptime: {formatUptime(backup.uptime)}
               </p>
             </div>
           </div>
@@ -168,39 +168,39 @@ export default function ClusterTab({ cluster, onOpenReportPreview }) {
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <MetricCard
-            title="Compute Load"
-            value={`${slaveCpu}%`}
-            subvalue={`${slave.cpu?.cores || 2} Cores Active`}
-            percent={slaveCpu}
+            title="CPU Utilization"
+            value={`${backupCpu}%`}
+            subvalue={`${backup.cpu?.cores || 2} Cores Active`}
+            percent={backupCpu}
             icon={Cpu}
-            badge="STANDBY"
+            badge="BACKUP"
             badgeColor="sky"
           />
           <MetricCard
-            title="Worker RAM"
-            value={formatBytes(slave.memory?.usedBytes)}
-            subvalue={`Total: ${formatBytes(slave.memory?.totalBytes)}`}
-            percent={slaveMemUsed}
+            title="Memory Allocation"
+            value={formatBytes(backup.memory?.usedBytes)}
+            subvalue={`Total: ${formatBytes(backup.memory?.totalBytes)}`}
+            percent={backupMemUsed}
             icon={Activity}
-            badge={`${slaveMemUsed}%`}
+            badge={`${backupMemUsed}%`}
             badgeColor="sky"
           />
           <MetricCard
-            title="Worker Storage"
-            value={formatBytes(slave.disk?.usedBytes)}
-            subvalue={`Free: ${formatBytes(slave.disk?.availBytes)}`}
-            percent={slaveDiskUsed}
+            title="Root Storage"
+            value={formatBytes(backup.disk?.usedBytes)}
+            subvalue={`Free: ${formatBytes(backup.disk?.availBytes)}`}
+            percent={backupDiskUsed}
             icon={HardDrive}
-            badge={`${slaveDiskUsed}%`}
+            badge={`${backupDiskUsed}%`}
             badgeColor="sky"
           />
           <MetricCard
-            title="VCN Connectivity"
-            value="Healthy"
-            subvalue="Latency: <1.2ms via private VCN"
-            icon={ShieldCheck}
-            badge="SECURE"
-            badgeColor="lime"
+            title="Load Average"
+            value={backup.cpu?.loadAvg ? backup.cpu.loadAvg.slice(0, 2).join(', ') : '0.05, 0.08'}
+            subvalue="1m, 5m system load"
+            icon={Database}
+            badge="15m: 0.10"
+            badgeColor="sky"
           />
         </div>
       </section>

@@ -80,6 +80,32 @@ fn init_schema(conn: &Connection) -> Result<()> {
             delivery_status TEXT,
             details TEXT
         );
+
+        CREATE TABLE IF NOT EXISTS cluster_nodes (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            role TEXT NOT NULL DEFAULT 'PRIMARY',
+            provider TEXT NOT NULL DEFAULT 'Custom',
+            ip_internal TEXT NOT NULL,
+            ip_public TEXT,
+            ssh_target TEXT,
+            status TEXT DEFAULT 'ONLINE',
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS cluster_services (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            description TEXT,
+            category TEXT NOT NULL DEFAULT 'core',
+            group_label TEXT NOT NULL DEFAULT 'General',
+            node_target TEXT NOT NULL DEFAULT 'all',
+            port INTEGER,
+            control_type TEXT NOT NULL DEFAULT 'docker',
+            serving_state TEXT NOT NULL DEFAULT 'active',
+            traffic_route TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
         "#,
     )?;
 
