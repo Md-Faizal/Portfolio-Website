@@ -1,0 +1,6 @@
+[Match]
+Name=br-2be5a056e665
+
+[Network]
+Address=172.18.0.1/16
+LinkLocalAddressing=no
