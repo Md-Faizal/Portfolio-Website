@@ -170,10 +170,16 @@ main() {
     write_heartbeat
     ensure_bridge_health
 
-    # 0. Check for manual maintenance mode flag
-    local maintenance_flag="$STATE_DIR/maintenance_mode"
-    if [ -f "$maintenance_flag" ] || [ -f "/home/ubuntu/MacOS-Production/state/maintenance_mode" ]; then
-        log "Maintenance mode flag detected. Skipping health checks and auto-recovery."
+    active_slot="$(get_active_slot)"
+    standby_slot="$(get_standby_slot)"
+    active_port="$(get_port_for_slot "$active_slot")"
+    standby_port="$(get_port_for_slot "$standby_slot")"
+
+    # 0. Check if active container is intentionally stopped (NOT running)
+    local active_container_status
+    active_container_status=$(docker inspect -f '{{.State.Status}}' "macos-server-$active_slot" 2>/dev/null || echo "not_found")
+    if [ "$active_container_status" = "exited" ] || [ "$active_container_status" = "created" ]; then
+        log "Active slot $active_slot container is in '$active_container_status' state (stopped by operator). Respecting stopped state, skipping auto-recovery."
         exit 0
     fi
 
