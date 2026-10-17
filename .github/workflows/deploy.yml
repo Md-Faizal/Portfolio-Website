@@ -167,6 +167,12 @@ jobs:
           chmod -R a+rX public frontend/dist
           ls -lh ./personal-site-rust
 
+      - name: "🐳 Build Production Docker Image"
+        run: |
+          docker build -t personal-site:latest -f Dockerfile .
+          docker save personal-site:latest | gzip > personal-site-image.tar.gz
+          ls -lh personal-site-image.tar.gz
+
       - name: "🔌 Setup SSH & Deploy to Ubuntu VM"
         env:
           SSH_HOST: ${{ secrets.SSH_HOST }}
@@ -217,9 +223,9 @@ jobs:
           echo "🛡️ Step 1: Ensuring remote directory structure & permissions..."
           ssh production "mkdir -p $TARGET_DIR/backend /home/ubuntu/stack/ops/ipc $TARGET_DIR/public $TARGET_DIR/frontend/dist"
 
-          # Step 2: Sync files via rsync (identical battle-tested delta transfer as MacOS & Bloomberg)
-          echo "📦 Step 2: Syncing binary, configs, and web assets via rsync..."
-          rsync -avz personal-site-rust Dockerfile docker-compose.yml production:"$TARGET_DIR/"
+          # Step 2: Sync files via rsync
+          echo "📦 Step 2: Syncing binary, image, configs, and web assets via rsync..."
+          rsync -avz personal-site-rust Dockerfile docker-compose.yml personal-site-image.tar.gz production:"$TARGET_DIR/"
           rsync -avz --delete frontend/dist/ production:"$TARGET_DIR/frontend/dist/"
           rsync -avz --delete public/ production:"$TARGET_DIR/public/"
 
@@ -234,11 +240,25 @@ jobs:
           chmod -R a+rX "$TARGET_DIR/public" "$TARGET_DIR/frontend/dist" 2>/dev/null || true
           chmod a+rx "$TARGET_DIR" /home/ubuntu /home/ubuntu/stack /home/ubuntu/stack/apps 2>/dev/null || true
 
+          # Configure Docker daemon DNS resolvers for Oracle Cloud VCN if needed
+          if [ ! -f /etc/docker/daemon.json ] || ! grep -q "169.254.169.254" /etc/docker/daemon.json 2>/dev/null; then
+            echo "🔧 Configuring Docker daemon DNS for Oracle Cloud VCN..."
+            sudo mkdir -p /etc/docker
+            echo '{"dns": ["169.254.169.254", "1.1.1.1", "8.8.8.8"]}' | sudo tee /etc/docker/daemon.json > /dev/null
+            sudo systemctl reload docker 2>/dev/null || sudo systemctl restart docker 2>/dev/null || true
+          fi
+
+          # Load pre-built production Docker image
+          if [ -f "$TARGET_DIR/personal-site-image.tar.gz" ]; then
+            echo "📦 Loading pre-built Docker image..."
+            docker load -i "$TARGET_DIR/personal-site-image.tar.gz"
+          fi
+
           # Ensure the standby probe SSH tunnel is active
           systemctl is-active --quiet cos-tunnel.service || sudo systemctl restart cos-tunnel.service || true
 
-          # Build and start container (Primary role)
-          NODE_ROLE=primary docker compose up -d --build --remove-orphans
+          # Start container (Primary role) using loaded image
+          NODE_ROLE=primary docker compose up -d --remove-orphans
 
           # Verify container health
           sleep 5
@@ -249,6 +269,9 @@ jobs:
           # Propagate to Standby Node (cos @ 10.0.0.195) via high-speed internal Oracle VCN
           echo "🛰️ Propagating release to Standby Node (cos @ 10.0.0.195)..."
           if [ -f "/home/ubuntu/.ssh/cockpit-container-of-souls" ]; then
+            echo "📦 Streaming Docker image to Standby Node (cos)..."
+            docker save personal-site:latest | gzip | ssh -o StrictHostKeyChecking=no -i /home/ubuntu/.ssh/cockpit-container-of-souls ubuntu@10.0.0.195 "gunzip | docker load"
+
             scp -o StrictHostKeyChecking=no -i /home/ubuntu/.ssh/cockpit-container-of-souls \
               "$TARGET_DIR/personal-site-rust" ubuntu@10.0.0.195:"$TARGET_DIR/personal-site-rust.tmp"
 
@@ -275,7 +298,7 @@ jobs:
             chmod a+rx "$TARGET_DIR" /home/ubuntu /home/ubuntu/stack /home/ubuntu/stack/apps 2>/dev/null || true
             mkdir -p backend
             touch backend/messages.db
-            NODE_ROLE=standby docker compose up -d --build --remove-orphans
+            NODE_ROLE=standby docker compose up -d --remove-orphans
             sleep 4
             curl -sS http://127.0.0.1:3002/api/maintenance-status || exit 1
             echo "✅ Standby personal-site-rust container on cos is healthy and ready!"
@@ -283,6 +306,9 @@ jobs:
           else
             echo "⚠️ Standby key /home/ubuntu/.ssh/cockpit-container-of-souls not found; skipping standby sync."
           fi
+
+          # Clean up local archive on primary VM
+          rm -f "$TARGET_DIR/personal-site-image.tar.gz"
           REMOTESCRIPT
 
       - name: "✅ Smoke Test — faizal.uk"
