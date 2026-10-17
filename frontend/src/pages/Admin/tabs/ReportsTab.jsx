@@ -44,14 +44,14 @@ export default function ReportsTab({
           <div className="flex items-center gap-2 mb-1.5">
             <span className="w-2 h-2 rounded-full bg-[#89ff00] animate-pulse" />
             <span className="text-xs font-mono font-semibold text-[#89ff00] tracking-widest uppercase">
-              Automated Supervision & Watchdog
+              Automated Infrastructure Digest
             </span>
           </div>
           <h2 className="text-xl sm:text-2xl font-bold text-white tracking-tight">
-            24h Cluster Telemetry & Email Dispatch
+            24h Infrastructure Telemetry &amp; Daily Email
           </h2>
           <p className="text-xs sm:text-sm text-neutral-400 mt-1 max-w-2xl leading-relaxed">
-            The Rust background daemon aggregates hardware telemetry, Docker health, and error logs every 24 hours, compiling a luxury HTML digest dispatched via Brevo relay.
+            Aggregates 24-hour hardware averages, CPU spike distributions, container health, and security logs into an interactive production digest.
           </p>
         </div>
 

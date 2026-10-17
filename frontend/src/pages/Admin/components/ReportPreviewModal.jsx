@@ -32,7 +32,7 @@ export default function ReportPreviewModal({
               <span className="w-2.5 h-2.5 rounded-full bg-[#89ff00] animate-pulse shrink-0" />
               <div>
                 <h3 className="text-sm sm:text-base font-semibold text-white leading-tight">
-                  24h Health Supervision Email Preview
+                  Daily Infrastructure Digest Preview
                 </h3>
                 <p className="text-xs font-mono text-neutral-400 truncate mt-0.5">
                   Recipient: <span className="text-white">{recipient || 'me@faizal.uk'}</span>

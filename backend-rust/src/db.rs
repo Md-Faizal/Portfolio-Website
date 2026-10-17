@@ -106,6 +106,30 @@ fn init_schema(conn: &Connection) -> Result<()> {
             traffic_route TEXT,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         );
+
+        CREATE TABLE IF NOT EXISTS system_metrics_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+            node_id TEXT NOT NULL,
+            cpu_percent REAL NOT NULL,
+            ram_percent REAL NOT NULL,
+            ram_used_bytes INTEGER NOT NULL,
+            ram_total_bytes INTEGER NOT NULL,
+            disk_percent REAL NOT NULL,
+            disk_used_bytes INTEGER NOT NULL DEFAULT 0,
+            disk_total_bytes INTEGER NOT NULL DEFAULT 0
+        );
+
+        CREATE TABLE IF NOT EXISTS http_request_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+            status_code INTEGER NOT NULL,
+            path TEXT,
+            ip TEXT
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_metrics_hist_ts ON system_metrics_history(timestamp);
+        CREATE INDEX IF NOT EXISTS idx_http_req_ts ON http_request_logs(timestamp);
         "#,
     )?;
 
