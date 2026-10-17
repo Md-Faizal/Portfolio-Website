@@ -65,15 +65,15 @@ export default function ServicesTab({ services = [], onServiceAction, onRefresh,
   const sortServices = (arr) => [...arr].sort((a, b) => serviceSortWeight(a) - serviceSortWeight(b));
 
   const primaryServices = services.filter((s) => getNodeCategory(s) === 'primary');
-  const secondaryServices = services.filter((s) => getNodeCategory(s) === 'secondary');
+  const backupServices = services.filter((s) => getNodeCategory(s) === 'backup');
   const bothServices = services.filter((s) => getNodeCategory(s) === 'both');
 
   const visiblePrimary = sortServices(primaryServices.filter(matchesFilter));
-  const visibleSecondary = sortServices(secondaryServices.filter(matchesFilter));
+  const visibleBackup = sortServices(backupServices.filter(matchesFilter));
   const visibleBoth = sortServices(bothServices.filter(matchesFilter));
 
   const primaryOnline = primaryServices.filter(isOnline).length;
-  const secondaryOnline = secondaryServices.filter(isOnline).length;
+  const backupOnline = backupServices.filter(isOnline).length;
   const bothOnline = bothServices.filter(isOnline).length;
   const totalOnline = services.filter(isOnline).length;
 
@@ -222,7 +222,7 @@ export default function ServicesTab({ services = [], onServiceAction, onRefresh,
             }`}
           >
             <Cpu className="w-3.5 h-3.5" />
-            <span>Backup Node ({secondaryServices.length})</span>
+            <span>Backup Node ({backupServices.length})</span>
           </button>
 
           <button
@@ -418,20 +418,20 @@ export default function ServicesTab({ services = [], onServiceAction, onRefresh,
             <div className="flex items-center gap-2 self-start sm:self-center shrink-0">
               <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-mono font-bold bg-sky-500/10 text-sky-400 border border-sky-500/25">
                 <span className="w-1.5 h-1.5 rounded-full bg-sky-400" />
-                {secondaryOnline} of {secondaryServices.length} Active
+                {backupOnline} of {backupServices.length} Active
               </span>
             </div>
           </div>
 
-          {visibleSecondary.length > 0 ? (
+          {visibleBackup.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {visibleSecondary.map((service) => (
+              {visibleBackup.map((service) => (
                 <ServiceCard key={service.id} service={service} onAction={onServiceAction} />
               ))}
             </div>
           ) : (
             <div className="p-8 text-center rounded-2xl bg-white/[0.02] border border-white/5 text-neutral-400 text-xs font-mono">
-              No matching services on Secondary VM for active filters.
+              No matching services on Backup Node for active filters.
             </div>
           )}
         </section>

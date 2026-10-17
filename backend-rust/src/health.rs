@@ -7,7 +7,7 @@ use std::process::Command;
 use std::time::Duration;
 use sysinfo::{CpuRefreshKind, Disks, MemoryRefreshKind, RefreshKind, System};
 use tokio::time::sleep;
-use tracing::info;
+use tracing::{info, warn};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -88,6 +88,7 @@ pub struct ServiceProbe {
     pub port: u16,
     pub status: String,
     pub badge_class: String,
+    pub category: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -133,6 +134,12 @@ pub struct SystemHealthData {
     pub analytics24h: Analytics24h,
     pub overall_status: String,
     pub health_issues: Vec<String>,
+    #[serde(default)]
+    pub node_role: String,
+    #[serde(default)]
+    pub is_standby: bool,
+    #[serde(default)]
+    pub node_ip: String,
 }
 
 pub fn format_bytes(bytes: u64) -> String {
@@ -187,13 +194,22 @@ pub async fn collect_system_health(db: &DbPool) -> SystemHealthData {
     sys.refresh_all();
 
     let uptime = System::uptime();
-    let hostname = System::host_name().unwrap_or_else(|| "faizal-vm".into());
-    let os_name = System::name().unwrap_or_else(|| "Linux".into());
-    let os_version = System::os_version().unwrap_or_else(|| "".into());
+    let hostname = System::host_name().unwrap_or_else(|| "macos".into());
+    let os_name = System::name().unwrap_or_else(|| "Ubuntu".into());
+    let os_version = System::os_version().unwrap_or_else(|| "24.04 LTS".into());
     let arch = std::env::consts::ARCH.to_string();
 
+    let env_node_role = std::env::var("NODE_ROLE").unwrap_or_else(|_| "primary".into());
+    let env_node_name = std::env::var("NODE_NAME").unwrap_or_default();
+    let is_current_standby = hostname.contains("container-of-souls")
+        || env_node_role.eq_ignore_ascii_case("standby")
+        || env_node_name.contains("container-of-souls");
+
+    let node_role = if is_current_standby { "standby".to_string() } else { "primary".to_string() };
+    let node_ip = if is_current_standby { "10.0.0.195".to_string() } else { "10.0.0.86".to_string() };
+
     let cpu_count = sys.cpus().len().max(1);
-    let cpu_model = sys.cpus().first().map(|c| c.brand().to_string()).unwrap_or_else(|| "Generic CPU".into());
+    let cpu_model = sys.cpus().first().map(|c| c.brand().to_string()).unwrap_or_else(|| "Generic Cloud vCPU".into());
     let load_avg = System::load_average();
 
     let load_pct = if cpu_count > 0 {
@@ -257,10 +273,11 @@ pub async fn collect_system_health(db: &DbPool) -> SystemHealthData {
 
     let mut health_issues = Vec::new();
 
-    // Query Cluster Slave Node (container-of-souls via 127.0.0.1:9100 tunnel)
-    let slave_data: Option<serde_json::Value> = {
+    // Query Cluster Standby Node (container-of-souls via 127.0.0.1:9100 tunnel)
+    // Only query if this instance is the PRIMARY node.
+    let slave_data: Option<serde_json::Value> = if !is_current_standby {
         let connect_res = tokio::time::timeout(
-            std::time::Duration::from_millis(1500),
+            std::time::Duration::from_millis(2500),
             tokio::net::TcpStream::connect("127.0.0.1:9100"),
         )
         .await;
@@ -287,6 +304,8 @@ pub async fn collect_system_health(db: &DbPool) -> SystemHealthData {
         } else {
             None
         }
+    } else {
+        None
     };
 
     // Docker Inspection
@@ -381,41 +400,38 @@ pub async fn collect_system_health(db: &DbPool) -> SystemHealthData {
         }
     }
 
-    // Service probes — probe all known ports via TCP
-    // Only "core" services raise health_issues when unreachable
+    // Service probes with logical categorization
     struct ProbeTarget {
         name: &'static str,
         port: u16,
-        is_core: bool,       // triggers health alert if offline
-        is_on_demand: bool,  // game engines / optional services
+        is_core: bool,
+        category: &'static str,
     }
     let probes = [
-        ProbeTarget { name: "Nginx Web (HTTP)",          port: 80,   is_core: true,  is_on_demand: false },
-        ProbeTarget { name: "Personal Site (Rust)",      port: 3002, is_core: true,  is_on_demand: false },
-        ProbeTarget { name: "MacOS Server (Blue)",       port: 3001, is_core: false, is_on_demand: false },
-        ProbeTarget { name: "Stalwart Mail Admin/API",   port: 8080, is_core: false, is_on_demand: false },
-        // Stalwart TLS mail ports — may be inactive by config; not core alerts
-        ProbeTarget { name: "Stalwart SMTPS (465)",      port: 465,  is_core: false, is_on_demand: false },
-        ProbeTarget { name: "Stalwart Submission (587)", port: 587,  is_core: false, is_on_demand: false },
-        ProbeTarget { name: "Stalwart IMAPS (993)",      port: 993,  is_core: false, is_on_demand: false },
-        // On-demand game engines
-        ProbeTarget { name: "CS Panel Web",              port: 3005, is_core: false, is_on_demand: true  },
-        ProbeTarget { name: "Minecraft Manager",         port: 5000, is_core: false, is_on_demand: true  },
-        // App backend remains startable during the gradual Rust migration
-        ProbeTarget { name: "Nexus Backend",             port: 3010, is_core: false, is_on_demand: true  },
+        ProbeTarget { name: "Nginx Web (HTTP)",          port: 80,   is_core: true,  category: "Core Web" },
+        ProbeTarget { name: "Personal Site (Rust)",      port: 3002, is_core: true,  category: "Core Web" },
+        ProbeTarget { name: "MacOS Server (Blue)",       port: 3001, is_core: false, category: "Core Web" },
+        ProbeTarget { name: "Stalwart Mail Admin/API",   port: 8080, is_core: false, category: "Mail" },
+        ProbeTarget { name: "Stalwart SMTPS (465)",      port: 465,  is_core: false, category: "Mail" },
+        ProbeTarget { name: "Stalwart Submission (587)", port: 587,  is_core: false, category: "Mail" },
+        ProbeTarget { name: "Stalwart IMAPS (993)",      port: 993,  is_core: false, category: "Mail" },
+        ProbeTarget { name: "CS Panel Web",              port: 3005, is_core: false, category: "On-Demand" },
+        ProbeTarget { name: "Minecraft Manager",         port: 5000, is_core: false, category: "On-Demand" },
+        ProbeTarget { name: "Nexus Backend",             port: 3010, is_core: false, category: "On-Demand" },
     ];
 
     let mut services = Vec::new();
     for p in &probes {
         let is_open = check_tcp_port(p.port).await;
-        if !is_open && p.is_core {
+        if !is_open && p.is_core && !is_current_standby {
             health_issues.push(format!("CRITICAL: Core service '{}' on port {} is unreachable!", p.name, p.port));
         }
         services.push(ServiceProbe {
             name: p.name.into(),
             port: p.port,
-            status: if is_open { "ONLINE".into() } else { "OFFLINE".into() },
+            status: if is_open { "ONLINE".into() } else if p.category == "On-Demand" { "STANDBY".into() } else { "OFFLINE".into() },
             badge_class: if is_open { "status-online".into() } else { "status-fail".into() },
+            category: p.category.into(),
         });
     }
 
@@ -452,57 +468,60 @@ pub async fn collect_system_health(db: &DbPool) -> SystemHealthData {
 
     let total_err_count = systemd_errors.len() + kernel_errors.len() + nginx_errors.len();
 
-    // Analytics from SQLite
+    // 24h Analytics & Contact Telemetry
     let (views, unique_v, msgs, admin_ok, admin_fail, ban_cnt) = {
         let conn = db.lock().await;
-        let v: i64 = conn.query_row(
+        let views: i64 = conn.query_row(
             "SELECT COUNT(*) FROM visitors WHERE timestamp >= datetime('now', '-24 hours')",
             [],
             |r| r.get(0),
         ).unwrap_or(0);
-        let uv: i64 = conn.query_row(
+
+        let unique_v: i64 = conn.query_row(
             "SELECT COUNT(DISTINCT ip) FROM visitors WHERE timestamp >= datetime('now', '-24 hours')",
             [],
             |r| r.get(0),
         ).unwrap_or(0);
-        let m: i64 = conn.query_row(
+
+        let msgs: i64 = conn.query_row(
             "SELECT COUNT(*) FROM messages WHERE created_at >= datetime('now', '-24 hours')",
             [],
             |r| r.get(0),
         ).unwrap_or(0);
-        let a_ok: i64 = conn.query_row(
+
+        let admin_ok: i64 = conn.query_row(
             "SELECT COUNT(*) FROM access_logs WHERE status = 'SUCCESS' AND timestamp >= datetime('now', '-24 hours')",
             [],
             |r| r.get(0),
         ).unwrap_or(0);
-        let a_fail: i64 = conn.query_row(
-            "SELECT COUNT(*) FROM access_logs WHERE status = 'FAILURE' AND timestamp >= datetime('now', '-24 hours')",
+
+        let admin_fail: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM access_logs WHERE status = 'FAILED' AND timestamp >= datetime('now', '-24 hours')",
             [],
             |r| r.get(0),
         ).unwrap_or(0);
-        let b: i64 = conn.query_row(
-            "SELECT COUNT(*) FROM banned_ips",
-            [],
-            |r| r.get(0),
-        ).unwrap_or(0);
-        (v, uv, m, a_ok, a_fail, b)
+
+        let ban_cnt: i64 = conn.query_row("SELECT COUNT(*) FROM banned_ips", [], |r| r.get(0)).unwrap_or(0);
+
+        (views, unique_v, msgs, admin_ok, admin_fail, ban_cnt)
     };
 
-    // Calculate overall status
+    // Calculate Overall Status
     let mut overall_status = "HEALTHY".to_string();
-    if disk_used_pct >= 92 {
+
+    if disk_used_pct >= 90 {
         overall_status = "CRITICAL".into();
-        health_issues.push(format!("Disk usage critically high: {}%", disk_used_pct));
-    } else if disk_used_pct >= 85 {
+        health_issues.push(format!("Primary Disk critical: {}% used", disk_used_pct));
+    } else if disk_used_pct >= 82 {
         overall_status = "WARNING".into();
-        health_issues.push(format!("Disk space usage elevated: {}%", disk_used_pct));
+        health_issues.push(format!("Primary Disk warning: {}% used", disk_used_pct));
     }
 
     if mem_used_pct >= 92 {
         if overall_status != "CRITICAL" {
             overall_status = "WARNING".into();
         }
-        health_issues.push(format!("RAM usage elevated: {}%", mem_used_pct));
+        health_issues.push(format!("Primary RAM usage elevated: {}%", mem_used_pct));
     }
 
     if docker_summary.unhealthy > 0 {
@@ -510,17 +529,20 @@ pub async fn collect_system_health(db: &DbPool) -> SystemHealthData {
         health_issues.push(format!("Docker reports {} unhealthy container(s)", docker_summary.unhealthy));
     }
 
-    if let Some(ref slave) = slave_data {
-        if slave.get("status").and_then(|s| s.as_str()) != Some("online") {
-            health_issues.push("Cluster Standby Node (container-of-souls) is unreachable or degraded!".into());
+    // Check Standby Node status ONLY if this is the Master Node
+    if !is_current_standby {
+        if let Some(ref slave) = slave_data {
+            if slave.get("status").and_then(|s| s.as_str()) != Some("online") {
+                health_issues.push("Cluster Standby Node (container-of-souls) is unreachable or degraded.".into());
+                if overall_status == "HEALTHY" {
+                    overall_status = "WARNING".into();
+                }
+            }
+        } else {
+            health_issues.push("Cluster Standby Node probe unreachable via 127.0.0.1:9100 tunnel (SSH tunnel to 10.0.0.195).".into());
             if overall_status == "HEALTHY" {
                 overall_status = "WARNING".into();
             }
-        }
-    } else {
-        health_issues.push("Cluster Standby Node probe unreachable via 127.0.0.1:9100 tunnel!".into());
-        if overall_status == "HEALTHY" {
-            overall_status = "WARNING".into();
         }
     }
 
@@ -582,46 +604,84 @@ pub async fn collect_system_health(db: &DbPool) -> SystemHealthData {
         },
         overall_status,
         health_issues,
+        node_role,
+        is_standby: is_current_standby,
+        node_ip,
     }
 }
 
 pub fn generate_report_html(data: &SystemHealthData) -> String {
-    let (status_bg, status_text_color, status_border, status_text) = match data.overall_status.as_str() {
-        "CRITICAL" => ("rgba(255, 51, 102, 0.15)", "#ff3366", "rgba(255, 51, 102, 0.4)", "CRITICAL ATTENTION REQUIRED"),
-        "WARNING" => ("rgba(251, 191, 36, 0.15)", "#fbbf24", "rgba(251, 191, 36, 0.4)", "SYSTEM WARNINGS DETECTED"),
-        _ => ("rgba(137, 255, 0, 0.12)", "#89ff00", "rgba(137, 255, 0, 0.35)", "ALL SYSTEMS OPERATIONAL"),
-    };
+    let is_critical = data.overall_status == "CRITICAL";
+    let is_warning = data.overall_status == "WARNING";
+    let is_healthy = data.overall_status == "HEALTHY";
 
-    let issues_html = if data.health_issues.is_empty() {
-        r#"<div style="background: rgba(137, 255, 0, 0.06); border: 1px solid rgba(137, 255, 0, 0.2); border-radius: 12px; padding: 14px 18px; color: #89ff00; font-size: 13px; font-family: monospace;">
-            ✓ Zero critical health anomalies detected across cluster nodes in the past 24 hours.
-        </div>"#.to_string()
+    // Dynamic Light Theme Hero Status Banner
+    let hero_status_banner = if is_healthy {
+        r#"<table border="0" cellpadding="0" cellspacing="0" width="100%" style="background:#ecfdf5; border:1px solid #a7f3d0; border-left:4px solid #10b981; border-radius:12px; padding:16px 20px;">
+          <tr>
+            <td valign="middle">
+              <div style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:12px; font-weight:800; color:#047857; letter-spacing:0.08em; text-transform:uppercase;">
+                ● ALL SYSTEMS OPERATIONAL
+              </div>
+              <div style="font-size:12px; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; color:#065f46; margin-top:3px; font-weight:500;">
+                ✓ Zero critical health anomalies detected across cluster nodes in the past 24 hours.
+              </div>
+            </td>
+          </tr>
+        </table>"#
     } else {
-        let items = data.health_issues
-            .iter()
-            .map(|i| format!(r#"<li style="color: #ff3366; margin-bottom: 6px; font-family: monospace; font-size: 13px;">⚠ {}</li>"#, i))
-            .collect::<Vec<_>>()
-            .join("");
-        format!(r#"<div style="background: rgba(255, 51, 102, 0.08); border-left: 3px solid #ff3366; border-radius: 12px; padding: 16px 20px;"><ul style="margin: 0; padding-left: 20px;">{}</ul></div>"#, items)
+        let (border_c, title_c, badge_text, bg_c) = if is_critical {
+            ("#f87171", "#b91c1c", "CRITICAL ANOMALIES DETECTED", "#fef2f2")
+        } else {
+            ("#fcd34d", "#b45309", "SYSTEM WARNINGS DETECTED", "#fffbeb")
+        };
+
+        let mut issues_items = String::new();
+        for issue in &data.health_issues {
+            issues_items.push_str(&format!(
+                r#"<li style="color:#b91c1c; margin-bottom:5px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:12px; font-weight:600;">⚠ {}</li>"#,
+                issue
+            ));
+        }
+
+        &format!(
+            r#"<table border="0" cellpadding="0" cellspacing="0" width="100%" style="background:{}; border:1px solid {}; border-left:4px solid {}; border-radius:12px; padding:16px 20px;">
+              <tr>
+                <td valign="middle">
+                  <div style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:12px; font-weight:800; color:{}; letter-spacing:0.08em; text-transform:uppercase;">
+                    ▲ {}
+                  </div>
+                  <div style="font-size:12px; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; color:#475569; margin-top:3px; margin-bottom:8px;">
+                    Automated cluster supervision flagged the following issues:
+                  </div>
+                  <ul style="margin:0; padding-left:18px;">
+                    {}
+                  </ul>
+                </td>
+              </tr>
+            </table>"#,
+            bg_c, border_c, border_c, title_c, badge_text, issues_items
+        )
     };
 
-    let cpu_pct = data.cpu.load_percent.min(100);
-    let mem_pct = data.memory.used_percent.min(100);
-    let disk_pct = data.disk.used_percent.min(100);
+    // Node 01 Gauges (Light Theme)
+    let n1_cpu_pct = data.cpu.load_percent.min(100);
+    let n1_mem_pct = data.memory.used_percent.min(100);
+    let n1_disk_pct = data.disk.used_percent.min(100);
 
-    let cpu_bar_color = if cpu_pct > 85 { "#ff3366" } else { "#89ff00" };
-    let mem_bar_color = if mem_pct > 85 { "#ff3366" } else { "#89ff00" };
-    let disk_bar_color = if disk_pct > 85 { "#ff3366" } else { "#89ff00" };
+    let n1_cpu_bar = if n1_cpu_pct > 85 { "#ef4444" } else if n1_cpu_pct > 70 { "#f59e0b" } else { "#10b981" };
+    let n1_mem_bar = if n1_mem_pct > 85 { "#ef4444" } else if n1_mem_pct > 70 { "#f59e0b" } else { "#10b981" };
+    let n1_disk_bar = if n1_disk_pct > 85 { "#ef4444" } else if n1_disk_pct > 70 { "#f59e0b" } else { "#10b981" };
 
-    // Slave Node Telemetry
-    let slave_section = if let Some(ref slave) = data.slave {
+    // Node 02 Card (Standby Node - Light Theme)
+    let node_02_card = if let Some(ref slave) = data.slave {
         let is_online = slave.get("status").and_then(|s| s.as_str()) == Some("online");
-        let badge_bg = if is_online { "rgba(137, 255, 0, 0.12)" } else { "rgba(255, 51, 102, 0.15)" };
-        let badge_color = if is_online { "#89ff00" } else { "#ff3366" };
-        let badge_border = if is_online { "rgba(137, 255, 0, 0.35)" } else { "rgba(255, 51, 102, 0.4)" };
+        let badge_bg = if is_online { "#ecfdf5" } else { "#fef2f2" };
+        let badge_color = if is_online { "#047857" } else { "#b91c1c" };
+        let badge_border = if is_online { "#a7f3d0" } else { "#fecaca" };
         let badge_text = if is_online { "ONLINE // RESPONSIVE" } else { "OFFLINE // UNREACHABLE" };
 
-        let slave_os = slave.get("os").and_then(|s| s.as_str()).unwrap_or("Ubuntu 26.04 LTS");
+        let slave_os = slave.get("os").and_then(|s| s.as_str()).unwrap_or("Ubuntu 24.04 LTS");
         let slave_uptime_secs = slave.get("uptime").and_then(|u| u.as_u64()).unwrap_or(0);
         let slave_uptime = format_uptime(slave_uptime_secs);
 
@@ -638,9 +698,9 @@ pub fn generate_report_html(data: &SystemHealthData) -> String {
         let slave_used_disk = slave.get("disk").and_then(|d| d.get("usedBytes")).and_then(|b| b.as_u64()).unwrap_or(0);
         let slave_total_disk = slave.get("disk").and_then(|d| d.get("totalBytes")).and_then(|b| b.as_u64()).unwrap_or(0);
 
-        let s_cpu_bar = if slave_cpu_pct > 85 { "#ff3366" } else { "#89ff00" };
-        let s_mem_bar = if slave_mem_pct > 85 { "#ff3366" } else { "#89ff00" };
-        let s_disk_bar = if slave_disk_pct > 85 { "#ff3366" } else { "#89ff00" };
+        let s_cpu_bar = if slave_cpu_pct > 85 { "#ef4444" } else if slave_cpu_pct > 70 { "#f59e0b" } else { "#10b981" };
+        let s_mem_bar = if slave_mem_pct > 85 { "#ef4444" } else if slave_mem_pct > 70 { "#f59e0b" } else { "#10b981" };
+        let s_disk_bar = if slave_disk_pct > 85 { "#ef4444" } else if slave_disk_pct > 70 { "#f59e0b" } else { "#10b981" };
 
         let mut daemons_html = String::new();
         if let Some(services) = slave.get("services").and_then(|s| s.as_array()) {
@@ -648,393 +708,637 @@ pub fn generate_report_html(data: &SystemHealthData) -> String {
                 let name = svc.get("name").and_then(|n| n.as_str()).unwrap_or("");
                 let st = svc.get("status").and_then(|s| s.as_str()).unwrap_or("unknown");
                 let is_act = st == "active";
-                let c = if is_act { "#89ff00" } else { "#ff3366" };
+                let (dot_c, text_c, bg_c) = if is_act { ("#10b981", "#047857", "#ecfdf5") } else { ("#ef4444", "#b91c1c", "#fef2f2") };
                 daemons_html.push_str(&format!(
-                    r#"<span style="display:inline-flex; align-items:center; margin-right:8px; margin-bottom:6px; padding:4px 10px; border-radius:6px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.07); font-family:monospace; font-size:11px; color:#cbd5e1;"><span style="display:inline-block; width:6px; height:6px; border-radius:50%; background:{}; margin-right:6px;"></span>{}: <strong style="color:{}; margin-left:4px;">{}</strong></span>"#,
-                    c, name, c, st.to_uppercase()
+                    r#"<span style="display:inline-flex; align-items:center; margin-right:8px; margin-bottom:6px; padding:4px 9px; border-radius:6px; background:{}; border:1px solid rgba(0,0,0,0.06); font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:11px; color:#334155;"><span style="display:inline-block; width:6px; height:6px; border-radius:50%; background:{}; margin-right:6px;"></span>{}: <strong style="color:{}; margin-left:4px;">{}</strong></span>"#,
+                    bg_c, dot_c, name, text_c, st.to_uppercase()
                 ));
             }
         }
 
         format!(
-            r#"<div class="card">
-                <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:14px;">
-                    <div>
-                        <div style="font-family:monospace; font-size:11px; font-weight:700; color:#89ff00; letter-spacing:0.12em; text-transform:uppercase;">NODE 02 // STANDBY CLUSTER NODE</div>
-                        <h3 style="color:#ffffff; font-size:17px; margin-top:2px;">container-of-souls (10.0.0.195 / 129.154.32.125)</h3>
-                        <div style="font-size:11px; font-family:monospace; color:#94a3b8; margin-top:3px;">Platform: {} &bull; Uptime: {}</div>
-                    </div>
-                    <span class="badge" style="background:{}; color:{}; border:1px solid {};">
-                        <span style="display:inline-block; width:6px; height:6px; border-radius:50%; background:{}; margin-right:6px;"></span>
-                        {}
-                    </span>
-                </div>
-
-                <table style="width:100%; margin:0 0 14px 0; border:none;">
+            r#"<table border="0" cellpadding="0" cellspacing="0" width="100%" style="background:#ffffff; border:1px solid #e2e8f0; border-radius:16px; padding:20px; box-shadow:0 1px 3px rgba(0,0,0,0.04);">
+              <tr>
+                <td>
+                  <table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-bottom:14px;">
                     <tr>
-                        <td class="metric-col" style="width:32%;">
-                            <div class="metric-lbl">CPU Load</div>
-                            <div class="metric-val">{}%</div>
-                            <div class="metric-sub">{} Cores &bull; {:.2}, {:.2}</div>
-                            <div class="progress-bg"><div style="height:100%; width:{}%; background:{}; border-radius:2px;"></div></div>
-                        </td>
-                        <td style="width:2%;"></td>
-                        <td class="metric-col" style="width:32%;">
-                            <div class="metric-lbl">RAM Usage</div>
-                            <div class="metric-val">{}%</div>
-                            <div class="metric-sub">{} / {}</div>
-                            <div class="progress-bg"><div style="height:100%; width:{}%; background:{}; border-radius:2px;"></div></div>
-                        </td>
-                        <td style="width:2%;"></td>
-                        <td class="metric-col" style="width:32%;">
-                            <div class="metric-lbl">NVMe Disk</div>
-                            <div class="metric-val">{}%</div>
-                            <div class="metric-sub">{} / {}</div>
-                            <div class="progress-bg"><div style="height:100%; width:{}%; background:{}; border-radius:2px;"></div></div>
-                        </td>
+                      <td valign="top">
+                        <div style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:10px; font-weight:800; color:#0284c7; letter-spacing:0.12em; text-transform:uppercase;">
+                          NODE 02 // STANDBY COMPUTE &amp; WORKERS
+                        </div>
+                        <div style="color:#0f172a; font-size:16px; font-weight:700; margin-top:2px;">
+                          container-of-souls <span style="font-size:12px; color:#64748b; font-weight:500;">(10.0.0.195 / 129.154.32.125)</span>
+                        </div>
+                        <div style="font-size:11px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; color:#64748b; margin-top:2px;">
+                          Platform: {} &bull; Uptime: {} &bull; <span style="color:#059669; font-weight:600;">Tunnel 127.0.0.1:9100 Connected</span>
+                        </div>
+                      </td>
+                      <td align="right" valign="top">
+                        <span style="display:inline-block; padding:4px 9px; border-radius:6px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:10px; font-weight:800; background:{}; color:{}; border:1px solid {}; text-transform:uppercase;">
+                          ● {}
+                        </span>
+                      </td>
                     </tr>
-                </table>
+                  </table>
 
-                <div style="border-top:1px solid rgba(255,255,255,0.06); padding-top:12px;">
-                    <div style="font-family:monospace; font-size:11px; color:#94a3b8; margin-bottom:8px; text-transform:uppercase;">Standby Node Services:</div>
+                  <table class="metric-row" border="0" cellpadding="0" cellspacing="0" width="100%">
+                    <tr>
+                      <td class="metric-tile" width="32%" valign="top" style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:12px;">
+                        <div style="font-size:10px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; color:#64748b; text-transform:uppercase; letter-spacing:0.06em; font-weight:700;">CPU LOAD</div>
+                        <div style="font-size:22px; font-weight:800; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; color:#0f172a; margin:3px 0;">{}%</div>
+                        <div style="font-size:10px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; color:#64748b;">{} Cores &bull; {:.2}, {:.2}</div>
+                        <div style="height:5px; background:#e2e8f0; border-radius:2px; margin-top:8px; overflow:hidden;">
+                          <div style="height:100%; width:{}%; background:{}; border-radius:2px;"></div>
+                        </div>
+                      </td>
+                      <td class="hide-mobile" width="2%"></td>
+                      <td class="metric-tile" width="32%" valign="top" style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:12px;">
+                        <div style="font-size:10px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; color:#64748b; text-transform:uppercase; letter-spacing:0.06em; font-weight:700;">RAM USAGE</div>
+                        <div style="font-size:22px; font-weight:800; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; color:#0f172a; margin:3px 0;">{}%</div>
+                        <div style="font-size:10px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; color:#64748b;">{} / {}</div>
+                        <div style="height:5px; background:#e2e8f0; border-radius:2px; margin-top:8px; overflow:hidden;">
+                          <div style="height:100%; width:{}%; background:{}; border-radius:2px;"></div>
+                        </div>
+                      </td>
+                      <td class="hide-mobile" width="2%"></td>
+                      <td class="metric-tile" width="32%" valign="top" style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:12px;">
+                        <div style="font-size:10px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; color:#64748b; text-transform:uppercase; letter-spacing:0.06em; font-weight:700;">NVME DISK</div>
+                        <div style="font-size:22px; font-weight:800; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; color:#0f172a; margin:3px 0;">{}%</div>
+                        <div style="font-size:10px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; color:#64748b;">{} / {}</div>
+                        <div style="height:5px; background:#e2e8f0; border-radius:2px; margin-top:8px; overflow:hidden;">
+                          <div style="height:100%; width:{}%; background:{}; border-radius:2px;"></div>
+                        </div>
+                      </td>
+                    </tr>
+                  </table>
+
+                  <div style="border-top:1px solid #f1f5f9; margin-top:12px; padding-top:10px;">
+                    <div style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:10px; color:#64748b; margin-bottom:6px; text-transform:uppercase; font-weight:700;">Standby Daemons:</div>
                     <div>{}</div>
-                </div>
-            </div>"#,
+                  </div>
+                </td>
+              </tr>
+            </table>"#,
             slave_os, slave_uptime,
-            badge_bg, badge_color, badge_border, badge_color, badge_text,
+            badge_bg, badge_color, badge_border, badge_text,
             slave_cpu_pct, slave_cores, slave_l1, slave_l5, slave_cpu_pct, s_cpu_bar,
             slave_mem_pct, format_bytes(slave_used_mem), format_bytes(slave_total_mem), slave_mem_pct, s_mem_bar,
             slave_disk_pct, format_bytes(slave_used_disk), format_bytes(slave_total_disk), slave_disk_pct, s_disk_bar,
             daemons_html
         )
     } else {
-        r#"<div class="card" style="border-color: rgba(255, 51, 102, 0.3);">
-            <div style="display:flex; justify-content:space-between; align-items:center;">
-                <div>
-                    <div style="font-family:monospace; font-size:11px; font-weight:700; color:#ff3366; letter-spacing:0.12em; text-transform:uppercase;">NODE 02 // STANDBY CLUSTER NODE</div>
-                    <h3 style="color:#ffffff; font-size:17px; margin-top:2px;">container-of-souls (10.0.0.195)</h3>
-                    <div style="font-size:11px; font-family:monospace; color:#94a3b8; margin-top:3px;">Standby node probe offline or unreachable across private VCN tunnel</div>
-                </div>
-                <span class="badge" style="background:rgba(255,51,102,0.15); color:#ff3366; border:1px solid rgba(255,51,102,0.4);">
-                    <span style="display:inline-block; width:6px; height:6px; border-radius:50%; background:#ff3366; margin-right:6px;"></span>
-                    OFFLINE
-                </span>
-            </div>
-        </div>"#.to_string()
+        r#"<table border="0" cellpadding="0" cellspacing="0" width="100%" style="background:#fff1f2; border:1px solid #fecdd3; border-radius:16px; padding:20px;">
+          <tr>
+            <td valign="middle">
+              <div style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:10px; font-weight:800; color:#e11d48; letter-spacing:0.12em; text-transform:uppercase;">
+                NODE 02 // STANDBY COMPUTE &amp; WORKERS
+              </div>
+              <div style="color:#0f172a; font-size:16px; font-weight:700; margin-top:2px;">
+                container-of-souls <span style="font-size:12px; color:#64748b; font-weight:500;">(10.0.0.195)</span>
+              </div>
+              <div style="font-size:11px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; color:#b91c1c; margin-top:3px;">
+                Standby node probe unreachable across private VCN tunnel (127.0.0.1:9100). Workloads remain operational on Node 01.
+              </div>
+            </td>
+            <td align="right" valign="middle">
+              <span style="display:inline-block; padding:4px 9px; border-radius:6px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:10px; font-weight:800; background:#ffe4e6; color:#b91c1c; border:1px solid #fecdd3; text-transform:uppercase;">
+                ▲ OFFLINE
+              </span>
+            </td>
+          </tr>
+        </table>"#.to_string()
     };
 
-    // Docker Containers Detailed Rows
-    let docker_rows = data.docker.iter().map(|c| {
-        let is_healthy = c.health == "healthy" || (c.state == "running" && c.health == "none");
-        let color = if is_healthy { "#89ff00" } else { "#ff3366" };
-        let health_label = if c.health == "healthy" {
-            "RUNNING // HEALTHY"
-        } else if c.state == "running" {
-            "RUNNING"
-        } else {
-            "STOPPED"
-        };
-        let net_info = if !c.ports.is_empty() {
-            c.ports.clone()
-        } else {
-            format!("net: {}", c.network)
-        };
+    // Docker Containers (Light Theme Cards)
+    let mut docker_containers_html = String::new();
+    if data.docker.is_empty() {
+        docker_containers_html.push_str(r#"<div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:14px; text-align:center; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:11px; color:#64748b;">No active container workloads detected on this node host.</div>"#);
+    } else {
+        for c in &data.docker {
+            let is_healthy = c.health == "healthy" || (c.state == "running" && c.health == "none");
+            let (badge_bg, badge_c, badge_border, status_label) = if is_healthy {
+                ("#ecfdf5", "#047857", "#a7f3d0", "RUNNING // HEALTHY")
+            } else if c.state == "running" {
+                ("#f0f9ff", "#0369a1", "#bae6fd", "RUNNING")
+            } else {
+                ("#f1f5f9", "#475569", "#cbd5e1", "STOPPED")
+            };
 
-        format!(
-            r#"<tr style="border-bottom: 1px solid rgba(255, 255, 255, 0.06);">
-                <td style="padding: 12px 10px; vertical-align: top;">
-                    <div style="font-weight: 700; color: #ffffff; font-family: monospace; font-size: 13px;">{}</div>
-                    <div style="font-size: 10px; font-family: monospace; color: #64748b; margin-top: 3px;">ID: {} &bull; {}</div>
-                </td>
-                <td style="padding: 12px 10px; vertical-align: top;">
-                    <div style="color: #cbd5e1; font-family: monospace; font-size: 12px; font-weight: 600;">{}</div>
-                    <div style="font-size: 10px; font-family: monospace; color: #94a3b8; margin-top: 3px;">Footprint: {}</div>
-                </td>
-                <td style="padding: 12px 10px; vertical-align: top;">
-                    <span style="display:inline-flex; align-items:center; padding: 3px 8px; border-radius: 6px; font-size: 10px; font-weight: 800; font-family: monospace; background: rgba(255,255,255,0.03); color: {}; border: 1px solid rgba(255,255,255,0.08);">
-                        <span style="display:inline-block; width:6px; height:6px; border-radius:50%; background:{}; margin-right:6px;"></span>
+            let net_info = if !c.ports.is_empty() {
+                c.ports.clone()
+            } else {
+                format!("net: {}", c.network)
+            };
+
+            docker_containers_html.push_str(&format!(
+                r#"<table border="0" cellpadding="0" cellspacing="0" width="100%" style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:12px 14px; margin-bottom:8px;">
+                  <tr>
+                    <td valign="top">
+                      <div style="font-weight:700; color:#0f172a; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:13px;">
                         {}
-                    </span>
-                    <div style="font-size: 10px; font-family: monospace; color: #64748b; margin-top: 3px;">{}</div>
-                </td>
-                <td style="padding: 12px 10px; vertical-align: top; color: #94a3b8; font-family: monospace; font-size: 11px;">
-                    <div>{}</div>
-                </td>
-            </tr>"#,
-            c.name, c.id, c.created,
-            c.image, c.size,
-            color, color, health_label, c.status,
-            net_info
-        )
-    }).collect::<Vec<_>>().join("");
+                      </div>
+                      <div style="font-size:10px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; color:#64748b; margin-top:2px;">
+                        ID: {} &bull; {}
+                      </div>
+                      <div style="font-size:11px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; color:#334155; margin-top:4px;">
+                        Image: <span style="color:#0f172a; font-weight:600;">{}</span> &bull; Footprint: <span style="color:#0f172a; font-weight:600;">{}</span>
+                      </div>
+                      <div style="font-size:10px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; color:#64748b; margin-top:2px;">
+                        Ports: <span style="color:#475569;">{}</span>
+                      </div>
+                    </td>
+                    <td align="right" valign="top">
+                      <span style="display:inline-block; padding:3px 8px; border-radius:6px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:9px; font-weight:800; background:{}; color:{}; border:1px solid {}; white-space:nowrap;">
+                        ● {}
+                      </span>
+                      <div style="font-size:10px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; color:#64748b; margin-top:4px;">
+                        {}
+                      </div>
+                    </td>
+                  </tr>
+                </table>"#,
+                c.name, c.id, c.created,
+                c.image, c.size,
+                net_info,
+                badge_bg, badge_c, badge_border, status_label,
+                c.status
+            ));
+        }
+    }
 
-    // Docker Images Catalog Rows
-    let docker_images_rows = data.docker_images.iter().map(|img| {
+    // Collapsible Docker Image Catalog (Light Theme)
+    let docker_images_collapsible = if !data.docker_images.is_empty() {
+        let mut image_rows = String::new();
+        for img in &data.docker_images {
+            image_rows.push_str(&format!(
+                r#"<tr style="border-bottom:1px solid #f1f5f9;">
+                  <td style="padding:6px 8px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:11px; color:#0f172a;">{}:<span style="color:#059669; font-weight:700;">{}</span></td>
+                  <td style="padding:6px 8px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:11px; color:#64748b;">{}</td>
+                  <td style="padding:6px 8px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:11px; color:#0f172a; font-weight:700;">{}</td>
+                </tr>"#,
+                img.repository, img.tag, img.id, img.size
+            ));
+        }
+
         format!(
-            r#"<tr style="border-bottom: 1px solid rgba(255, 255, 255, 0.04);">
-                <td style="padding: 8px 10px; font-family: monospace; font-size: 12px; color: #ffffff; font-weight: 600;">
-                    {}:<span style="color:#89ff00;">{}</span>
-                </td>
-                <td style="padding: 8px 10px; font-family: monospace; font-size: 11px; color: #94a3b8;">{}</td>
-                <td style="padding: 8px 10px; font-family: monospace; font-size: 11px; color: #cbd5e1; font-weight: 700;">{}</td>
-                <td style="padding: 8px 10px; font-family: monospace; font-size: 11px; color: #64748b;">{}</td>
-                <td style="padding: 8px 10px; font-family: monospace; font-size: 11px; color: #94a3b8; text-align: center;">{}</td>
-            </tr>"#,
-            img.repository, img.tag, img.id, img.size, img.created, img.containers
+            r#"<div style="margin-top:14px; border-top:1px solid #f1f5f9; padding-top:10px;">
+              <details style="cursor:pointer;">
+                <summary style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:11px; font-weight:700; color:#0284c7; outline:none; user-select:none;">
+                  ▸ Tap to Inspect Host Docker Image Cache ({})
+                </summary>
+                <div style="margin-top:8px; overflow-x:auto;">
+                  <table border="0" cellpadding="0" cellspacing="0" width="100%" style="border-collapse:collapse;">
+                    <thead>
+                      <tr style="border-bottom:1px solid #e2e8f0; text-align:left;">
+                        <th style="padding:6px 8px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:10px; color:#64748b; text-transform:uppercase;">Repository &amp; Tag</th>
+                        <th style="padding:6px 8px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:10px; color:#64748b; text-transform:uppercase;">Image ID</th>
+                        <th style="padding:6px 8px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:10px; color:#64748b; text-transform:uppercase;">Virtual Size</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {}
+                    </tbody>
+                  </table>
+                </div>
+              </details>
+            </div>"#,
+            data.docker_images.len(),
+            image_rows
         )
-    }).collect::<Vec<_>>().join("");
+    } else {
+        String::new()
+    };
 
-    // Services Probes Matrix - Guaranteed Green for ONLINE & email-safe table grid
+    // Services Probes Grid (Light Theme)
     let mut services_cells = Vec::new();
     for s in &data.services {
-        let is_up = s.status.eq_ignore_ascii_case("online") || s.status.eq_ignore_ascii_case("running") || s.status.eq_ignore_ascii_case("active");
-        let is_standby = s.name.contains("CS Panel") || s.name.contains("Minecraft") || s.name.contains("Nexus");
+        let is_up = s.status.eq_ignore_ascii_case("online");
+        let is_standby = s.status.eq_ignore_ascii_case("standby");
 
         let (dot_c, text_c, bg_c, border_c, label) = if is_up {
-            ("#89ff00", "#89ff00", "rgba(137, 255, 0, 0.12)", "rgba(137, 255, 0, 0.35)", "ONLINE")
+            ("#10b981", "#047857", "#ecfdf5", "#a7f3d0", "ONLINE")
         } else if is_standby {
-            ("#64748b", "#94a3b8", "rgba(255, 255, 255, 0.04)", "rgba(255, 255, 255, 0.08)", "STANDBY")
+            ("#94a3b8", "#64748b", "#f8fafc", "#e2e8f0", "STANDBY")
         } else {
-            ("#ff3366", "#ff3366", "rgba(255, 51, 102, 0.15)", "rgba(255, 51, 102, 0.4)", "OFFLINE")
+            ("#ef4444", "#b91c1c", "#fef2f2", "#fecaca", "OFFLINE")
         };
 
         services_cells.push(format!(
-            r#"<td style="width:50%; padding:4px; vertical-align:middle;">
-                <table style="width:100%; margin:0; border:1px solid rgba(255,255,255,0.06); background:#070709; border-radius:8px; padding:8px 10px;">
-                    <tr>
-                        <td style="font-family:monospace; font-size:11px; color:#f8fafc; vertical-align:middle; white-space:nowrap;">
-                            <span style="display:inline-block; width:7px; height:7px; border-radius:50%; background:{}; margin-right:6px; vertical-align:middle;"></span>
-                            {} <span style="color:#64748b;">:{}</span>
-                        </td>
-                        <td style="text-align:right; vertical-align:middle;">
-                            <span style="display:inline-block; padding:2px 8px; border-radius:4px; font-family:monospace; font-size:10px; font-weight:800; color:{}; background:{}; border:1px solid {};">
-                                {}
-                            </span>
-                        </td>
-                    </tr>
+            r#"<td class="fluid-cell" width="50%" style="padding:4px;" valign="middle">
+                <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:8px 10px;">
+                  <tr>
+                    <td style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:11px; color:#0f172a; vertical-align:middle; white-space:nowrap; font-weight:600;">
+                      <span style="display:inline-block; width:7px; height:7px; border-radius:50%; background:{}; margin-right:6px; vertical-align:middle;"></span>
+                      {} <span style="color:#64748b; font-weight:400;">:{}</span>
+                    </td>
+                    <td align="right" style="vertical-align:middle;">
+                      <span style="display:inline-block; padding:2px 7px; border-radius:4px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:9px; font-weight:800; color:{}; background:{}; border:1px solid {};">
+                        {}
+                      </span>
+                    </td>
+                  </tr>
                 </table>
-            </td>"#,
+              </td>"#,
             dot_c, s.name, s.port, text_c, bg_c, border_c, label
         ));
     }
 
-    let mut service_grid = String::new();
-    service_grid.push_str("<table style=\"width:100%; border:none; margin:0; border-collapse:collapse;\">");
+    let mut services_grid_html = String::new();
+    services_grid_html.push_str("<table border=\"0\" cellpadding=\"0\" cellspacing=\"0\" width=\"100%\">");
     for chunk in services_cells.chunks(2) {
-        service_grid.push_str("<tr>");
+        services_grid_html.push_str("<tr>");
         for cell in chunk {
-            service_grid.push_str(cell);
+            services_grid_html.push_str(cell);
         }
         if chunk.len() == 1 {
-            service_grid.push_str("<td style=\"width:50%; padding:4px;\"></td>");
+            services_grid_html.push_str("<td class=\"fluid-cell\" width=\"50%\" style=\"padding:4px;\"></td>");
         }
-        service_grid.push_str("</tr>");
+        services_grid_html.push_str("</tr>");
     }
-    service_grid.push_str("</table>");
+    services_grid_html.push_str("</table>");
+
+    // Diagnostic Logs Collapsible Section
+    let diagnostic_logs_section = if data.errors24h.total_error_count > 0 {
+        let mut err_lines = String::new();
+        for line in &data.errors24h.systemd {
+            err_lines.push_str(&format!("systemd: {}\n", line));
+        }
+        for line in &data.errors24h.kernel {
+            err_lines.push_str(&format!("kernel: {}\n", line));
+        }
+        for line in &data.errors24h.nginx {
+            err_lines.push_str(&format!("nginx: {}\n", line));
+        }
+
+        format!(
+            r#"<tr>
+              <td style="padding: 0 0 16px 0;">
+                <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background:#ffffff; border:1px solid #e2e8f0; border-radius:16px; padding:20px; box-shadow:0 1px 3px rgba(0,0,0,0.04);">
+                  <tr>
+                    <td>
+                      <details style="cursor:pointer;">
+                        <summary style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:12px; font-weight:700; color:#b45309; outline:none; user-select:none;">
+                          ▸ Tap to View 24h Diagnostic Audit Traces ({} incident records)
+                        </summary>
+                        <div style="margin-top:12px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:12px; overflow-x:auto;">
+                          <pre style="margin:0; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:10px; color:#334155; line-height:1.4; white-space:pre-wrap;">{}</pre>
+                        </div>
+                      </details>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>"#,
+            data.errors24h.total_error_count,
+            err_lines
+        )
+    } else {
+        String::new()
+    };
+
+    let reporting_node_label = if data.is_standby {
+        format!("container-of-souls (Standby Worker • {})", data.node_ip)
+    } else {
+        format!("macos (Primary Core • {})", data.node_ip)
+    };
+
+    let docker_summary_text = format!(
+        "{} Running, {} Healthy, {} Stopped",
+        data.docker_summary.running, data.docker_summary.healthy, data.docker_summary.stopped
+    );
+
+    let gen_time = Utc::now().format("%Y-%m-%d %H:%M:%S UTC").to_string();
 
     format!(
         r##"<!DOCTYPE html>
-<html lang="en">
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
 <title>Atelier Cluster 24h Supervision Report</title>
 <style>
-body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #000000; color: #f8fafc; margin: 0; padding: 30px 15px; -webkit-font-smoothing: antialiased; }}
-.container {{ max-width: 680px; margin: 0 auto; }}
-.card {{ background: #0c0d10; border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 16px; padding: 24px; margin-bottom: 20px; }}
-.header-card {{ background: #0c0d10; border: 1px solid rgba(137, 255, 0, 0.25); border-radius: 16px; padding: 28px 24px; margin-bottom: 20px; }}
-.badge {{ display: inline-flex; align-items: center; padding: 6px 14px; border-radius: 8px; font-size: 11px; font-weight: 700; font-family: monospace; letter-spacing: 0.1em; text-transform: uppercase; }}
-.metric-col {{ background: #070709; border: 1px solid rgba(255, 255, 255, 0.06); border-radius: 12px; padding: 14px; vertical-align: top; }}
-.metric-val {{ font-size: 26px; font-weight: 800; font-family: monospace; color: #ffffff; margin: 4px 0; }}
-.metric-lbl {{ font-size: 11px; font-family: monospace; text-transform: uppercase; color: #94a3b8; letter-spacing: 0.08em; }}
-.metric-sub {{ font-size: 11px; font-family: monospace; color: #64748b; }}
-.progress-bg {{ width: 100%; height: 4px; background: rgba(255, 255, 255, 0.08); border-radius: 2px; margin-top: 10px; overflow: hidden; }}
-table {{ width: 100%; border-collapse: collapse; margin-top: 12px; }}
-th {{ text-align: left; padding: 8px 12px; color: #94a3b8; font-family: monospace; font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; border-bottom: 1px solid rgba(255, 255, 255, 0.08); }}
-h2, h3 {{ margin: 0; font-weight: 700; letter-spacing: -0.02em; }}
+  body, table, td, a {{ -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; }}
+  body {{ margin: 0 !important; padding: 0 !important; width: 100% !important; background-color: #f1f5f9 !important; color: #0f172a; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; -webkit-font-smoothing: antialiased; }}
+  .touch-btn {{ display: inline-block !important; min-height: 44px !important; line-height: 44px !important; padding: 0 16px !important; text-align: center !important; text-decoration: none !important; font-weight: 700 !important; font-size: 11px !important; border-radius: 10px !important; box-sizing: border-box !important; }}
+  @media only screen and (max-width: 620px) {{
+    .email-container {{ width: 100% !important; max-width: 100% !important; }}
+    .fluid-cell {{ display: block !important; width: 100% !important; box-sizing: border-box !important; padding-left: 0 !important; padding-right: 0 !important; margin-bottom: 8px !important; }}
+    .metric-row {{ display: block !important; width: 100% !important; }}
+    .metric-tile {{ display: block !important; width: 100% !important; margin-bottom: 8px !important; box-sizing: border-box !important; }}
+    .header-logo-td {{ display: block !important; width: 100% !important; text-align: left !important; margin-bottom: 12px !important; }}
+    .header-text-td {{ display: block !important; width: 100% !important; }}
+    .action-bar-btn {{ display: block !important; width: 100% !important; margin-bottom: 8px !important; text-align: center !important; padding-left: 0 !important; padding-right: 0 !important; }}
+    .hide-mobile {{ display: none !important; }}
+  }}
 </style>
 </head>
-<body>
-<div class="container">
-    <!-- Brand & Executive Header with FZ Monogram -->
-    <div class="header-card">
-        <table style="width:100%; border:none; margin:0; padding:0;">
-            <tr>
-                <td style="width:62px; vertical-align:middle; padding-right:16px;">
-                    <div style="background:#050507; border:1px solid rgba(137,255,0,0.35); border-radius:12px; padding:10px 12px; text-align:center; box-shadow:0 0 20px rgba(137,255,0,0.12);">
-                        <svg viewBox="0 0 171.63 91" width="52" height="27" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:block; margin:0 auto;">
-                            <path d="M43.82,70.3l64.52.05,5.42-12.76-32.78-.36,41.09-19.08,7.56-18.43,27.69.85-25.84,61.15c-2.63,6.23-11.43,8.64-18.18,8.65l-111.12.13,41.64-20.2Z" fill="#ff3366" />
-                            <path d="M129.63,19.71l-65.22.74-5.49,12.65,32.87.55-41.14,19.05-6.83,17.6-28.38-.02L41.22,9.13C43.67,3.32,52.08.55,58.48.55l110.96-.05-39.82,19.21Z" fill="#89ff00" />
-                            <polygon points="44.55 69.8 51.04 53.07 93.98 33.19 59.67 32.61 64.74 20.95 128.88 20.22 121.68 37.77 78.77 57.7 113 58.08 108.01 69.85 44.55 69.8" fill="#111113" />
-                            <path d="M128.13,20.73l-6.84,16.67-40.73,18.92-4,1.86,4.41.05,31.28.34-4.57,10.78-62.4-.05,6.16-15.86,40.77-18.88,3.96-1.83-4.36-.07-31.37-.53,4.64-10.68,63.06-.71M129.63,19.71l-65.22.74-5.49,12.65,32.87.55-41.14,19.05-6.83,17.6,64.52.05,5.42-12.76-32.78-.36,41.09-19.08,7.56-18.43h0Z" fill="#ffffff" />
-                        </svg>
-                    </div>
-                </td>
-                <td style="vertical-align:middle;">
-                    <div style="font-family:monospace; font-size:11px; font-weight:700; color:#89ff00; letter-spacing:0.18em; text-transform:uppercase; margin-bottom:4px;">
-                        MOHAMMAD FAIZAL // ATELIER CLUSTER
-                    </div>
-                    <h2 style="color:#ffffff; font-size:20px; font-weight:700; margin:0 0 4px 0; letter-spacing:-0.02em;">
-                        24h System Health &amp; Supervision Report
-                    </h2>
-                    <div style="font-size:11px; font-family:monospace; color:#94a3b8; line-height:1.4;">
-                        Master: {} (10.0.0.86) &bull; Platform: {} &bull; Uptime: {}
-                    </div>
-                </td>
-            </tr>
+<body style="margin:0; padding:24px 8px; background-color:#f1f5f9; color:#0f172a;">
+<table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color:#f1f5f9; margin:0; padding:0;">
+<tr>
+<td align="center" style="padding: 10px 4px;">
+  
+  <table class="email-container" border="0" cellpadding="0" cellspacing="0" width="640" style="max-width:640px; width:100%; margin:0 auto;">
+    
+    <!-- EXECUTIVE BRAND & ORIGIN CARD (LIGHT THEME + FULL NEON MONOGRAM) -->
+    <tr>
+      <td style="padding: 0 0 16px 0;">
+        <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background:#ffffff; border:1px solid #e2e8f0; border-radius:16px; padding:24px; box-shadow:0 1px 4px rgba(0,0,0,0.05);">
+          <tr>
+            <td class="header-logo-td" width="56" valign="middle" style="padding-right:16px;">
+              <!-- Full Neon FZ Monogram in Sleek Dark Pill -->
+              <div style="background:#090d16; border:1px solid rgba(137,255,0,0.5); border-radius:12px; padding:10px; text-align:center; box-shadow:0 0 20px rgba(137,255,0,0.25);">
+                <svg viewBox="0 0 171.63 91" width="46" height="24" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:block; margin:0 auto;">
+                  <path d="M43.82,70.3l64.52.05,5.42-12.76-32.78-.36,41.09-19.08,7.56-18.43,27.69.85-25.84,61.15c-2.63,6.23-11.43,8.64-18.18,8.65l-111.12.13,41.64-20.2Z" fill="#89ff00" />
+                  <path d="M129.63,19.71l-65.22.74-5.49,12.65,32.87.55-41.14,19.05-6.83,17.6-28.38-.02L41.22,9.13C43.67,3.32,52.08.55,58.48.55l110.96-.05-39.82,19.21Z" fill="#89ff00" />
+                  <polygon points="44.55 69.8 51.04 53.07 93.98 33.19 59.67 32.61 64.74 20.95 128.88 20.22 121.68 37.77 78.77 57.7 113 58.08 108.01 69.85 44.55 69.8" fill="#0f172a" />
+                  <path d="M128.13,20.73l-6.84,16.67-40.73,18.92-4,1.86,4.41.05,31.28.34-4.57,10.78-62.4-.05,6.16-15.86,40.77-18.88,3.96-1.83-4.36-.07-31.37-.53,4.64-10.68,63.06-.71M129.63,19.71l-65.22.74-5.49,12.65,32.87.55-41.14,19.05-6.83,17.6,64.52.05,5.42-12.76-32.78-.36,41.09-19.08,7.56-18.43h0Z" fill="#ffffff" />
+                </svg>
+              </div>
+            </td>
+            <td class="header-text-td" valign="middle">
+              <div style="font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace; font-size:11px; font-weight:800; color:#059669; letter-spacing:0.18em; text-transform:uppercase; margin-bottom:4px;">
+                MOHAMMAD FAIZAL // ATELIER CLUSTER
+              </div>
+              <h1 style="color:#0f172a; font-size:20px; font-weight:800; margin:0 0 6px 0; letter-spacing:-0.02em; line-height:1.2;">
+                24h System Health &amp; Supervision Report
+              </h1>
+              <div style="font-size:11px; font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace; color:#64748b; line-height:1.5;">
+                <span style="color:#0284c7; font-weight:700;">Reporting Node:</span> {} &bull; <span style="color:#334155; font-weight:600;">{}</span> &bull; <span style="color:#64748b;">Uptime: {}</span>
+              </div>
+            </td>
+          </tr>
         </table>
-        <div style="margin-top:16px;">
-            <span class="badge" style="background:{}; color:{}; border:1px solid {};">
-                <span style="display:inline-block; width:6px; height:6px; border-radius:50%; background:{}; margin-right:8px;"></span>
-                {}
-            </span>
-        </div>
-    </div>
+      </td>
+    </tr>
 
-    <!-- Cluster Diagnostics & Status Alerts -->
-    <div class="card">
-        <h3 style="color: #ffffff; font-size: 16px; margin-bottom: 4px;">Anomalies & Health Audit</h3>
-        <p style="font-size: 12px; font-family: monospace; color: #94a3b8; margin: 0 0 14px 0;">Automated 24h Cluster Node Inspection</p>
+    <!-- REAL-TOUCH QUICK-ACTION TOUCH BAR -->
+    <tr>
+      <td style="padding: 0 0 16px 0;">
+        <table border="0" cellpadding="0" cellspacing="0" width="100%">
+          <tr>
+            <td class="action-bar-btn" width="32%" style="padding-right:6px;">
+              <a href="https://faizal.uk/admin.html" class="touch-btn" style="display:block; background:#0f172a; color:#89ff00; border:1px solid #0f172a; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; text-align:center; text-decoration:none; box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+                ⚡ CLUSTER ADMIN
+              </a>
+            </td>
+            <td class="action-bar-btn" width="32%" style="padding-right:6px; padding-left:6px;">
+              <a href="https://faizal.uk" class="touch-btn" style="display:block; background:#ffffff; color:#0284c7; border:1px solid #cbd5e1; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; text-align:center; text-decoration:none; box-shadow:0 1px 2px rgba(0,0,0,0.05);">
+                🌐 LIVE PORTFOLIO
+              </a>
+            </td>
+            <td class="action-bar-btn" width="32%" style="padding-left:6px;">
+              <a href="https://faizal.uk/api/system-stats" class="touch-btn" style="display:block; background:#ffffff; color:#334155; border:1px solid #cbd5e1; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; text-align:center; text-decoration:none; box-shadow:0 1px 2px rgba(0,0,0,0.05);">
+                🩺 TELEMETRY API
+              </a>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+
+    <!-- STATUS HERO BANNER -->
+    <tr>
+      <td style="padding: 0 0 16px 0;">
         {}
-    </div>
+      </td>
+    </tr>
 
-    <!-- Node 01: Master Core -->
-    <div class="card">
-        <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:14px;">
-            <div>
-                <div style="font-family:monospace; font-size:11px; font-weight:700; color:#89ff00; letter-spacing:0.12em; text-transform:uppercase;">NODE 01 // MASTER INGRESS & CORE</div>
-                <h3 style="color:#ffffff; font-size:17px; margin-top:2px;">{} (10.0.0.86 / 68.233.115.138)</h3>
-                <div style="font-size:11px; font-family:monospace; color:#94a3b8; margin-top:3px;">Platform: {} &bull; Uptime: {}</div>
-            </div>
-            <span class="badge" style="background:rgba(137,255,0,0.12); color:#89ff00; border:1px solid rgba(137,255,0,0.35);">
-                <span style="display:inline-block; width:6px; height:6px; border-radius:50%; background:#89ff00; margin-right:6px;"></span>
-                ONLINE // MASTER
-            </span>
-        </div>
-        
-        <table style="width:100%; margin:0; border:none;">
-            <tr>
-                <td class="metric-col" style="width:32%;">
-                    <div class="metric-lbl">CPU Load</div>
-                    <div class="metric-val">{}%</div>
-                    <div class="metric-sub">{} vCPUs Active</div>
-                    <div class="progress-bg"><div style="height:100%; width:{}%; background:{}; border-radius:2px;"></div></div>
-                </td>
-                <td style="width:2%;"></td>
-                <td class="metric-col" style="width:32%;">
-                    <div class="metric-lbl">RAM Usage</div>
-                    <div class="metric-val">{}%</div>
-                    <div class="metric-sub">{} / {}</div>
-                    <div class="progress-bg"><div style="height:100%; width:{}%; background:{}; border-radius:2px;"></div></div>
-                </td>
-                <td style="width:2%;"></td>
-                <td class="metric-col" style="width:32%;">
-                    <div class="metric-lbl">NVMe Disk (/)</div>
-                    <div class="metric-val">{}%</div>
-                    <div class="metric-sub">{} / {}</div>
-                    <div class="progress-bg"><div style="height:100%; width:{}%; background:{}; border-radius:2px;"></div></div>
-                </td>
-            </tr>
+    <!-- CLUSTER TOPOLOGY: NODE 01 (PRIMARY CORE & INGRESS) -->
+    <tr>
+      <td style="padding: 0 0 16px 0;">
+        <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background:#ffffff; border:1px solid #e2e8f0; border-radius:16px; padding:20px; box-shadow:0 1px 3px rgba(0,0,0,0.04);">
+          <tr>
+            <td>
+              <table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-bottom:14px;">
+                <tr>
+                  <td valign="top">
+                    <div style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:10px; font-weight:800; color:#059669; letter-spacing:0.12em; text-transform:uppercase;">
+                      NODE 01 // PRIMARY INGRESS &amp; CORE
+                    </div>
+                    <div style="color:#0f172a; font-size:16px; font-weight:700; margin-top:2px;">
+                      macos <span style="font-size:12px; color:#64748b; font-weight:500;">(10.0.0.86 / 68.233.115.138)</span>
+                    </div>
+                    <div style="font-size:11px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; color:#64748b; margin-top:2px;">
+                      Platform: {} &bull; Uptime: {}
+                    </div>
+                  </td>
+                  <td align="right" valign="top">
+                    <span style="display:inline-block; padding:4px 9px; border-radius:6px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:10px; font-weight:800; background:#ecfdf5; color:#047857; border:1px solid #a7f3d0; text-transform:uppercase;">
+                      ● ONLINE // MASTER
+                    </span>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- Node 01 Gauges -->
+              <table class="metric-row" border="0" cellpadding="0" cellspacing="0" width="100%">
+                <tr>
+                  <td class="metric-tile" width="32%" valign="top" style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:12px;">
+                    <div style="font-size:10px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; color:#64748b; text-transform:uppercase; letter-spacing:0.06em; font-weight:700;">CPU LOAD</div>
+                    <div style="font-size:22px; font-weight:800; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; color:#0f172a; margin:3px 0;">{}%</div>
+                    <div style="font-size:10px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; color:#64748b;">{} vCPUs Active</div>
+                    <div style="height:5px; background:#e2e8f0; border-radius:2px; margin-top:8px; overflow:hidden;">
+                      <div style="height:100%; width:{}%; background:{}; border-radius:2px;"></div>
+                    </div>
+                  </td>
+                  <td class="hide-mobile" width="2%"></td>
+                  <td class="metric-tile" width="32%" valign="top" style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:12px;">
+                    <div style="font-size:10px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; color:#64748b; text-transform:uppercase; letter-spacing:0.06em; font-weight:700;">RAM USAGE</div>
+                    <div style="font-size:22px; font-weight:800; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; color:#0f172a; margin:3px 0;">{}%</div>
+                    <div style="font-size:10px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; color:#64748b;">{} / {}</div>
+                    <div style="height:5px; background:#e2e8f0; border-radius:2px; margin-top:8px; overflow:hidden;">
+                      <div style="height:100%; width:{}%; background:{}; border-radius:2px;"></div>
+                    </div>
+                  </td>
+                  <td class="hide-mobile" width="2%"></td>
+                  <td class="metric-tile" width="32%" valign="top" style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:12px;">
+                    <div style="font-size:10px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; color:#64748b; text-transform:uppercase; letter-spacing:0.06em; font-weight:700;">NVME DISK (/)</div>
+                    <div style="font-size:22px; font-weight:800; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; color:#0f172a; margin:3px 0;">{}%</div>
+                    <div style="font-size:10px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; color:#64748b;">{} / {}</div>
+                    <div style="height:5px; background:#e2e8f0; border-radius:2px; margin-top:8px; overflow:hidden;">
+                      <div style="height:100%; width:{}%; background:{}; border-radius:2px;"></div>
+                    </div>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
         </table>
-    </div>
+      </td>
+    </tr>
 
-    <!-- Node 02: Standby Node (container-of-souls) -->
+    <!-- CLUSTER TOPOLOGY: NODE 02 (STANDBY NODE) -->
+    <tr>
+      <td style="padding: 0 0 16px 0;">
+        {}
+      </td>
+    </tr>
+
+    <!-- WORKLOADS: DOCKER VIRTUAL UNITS -->
+    <tr>
+      <td style="padding: 0 0 16px 0;">
+        <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background:#ffffff; border:1px solid #e2e8f0; border-radius:16px; padding:20px; box-shadow:0 1px 3px rgba(0,0,0,0.04);">
+          <tr>
+            <td>
+              <table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-bottom:14px;">
+                <tr>
+                  <td>
+                    <h3 style="color:#0f172a; font-size:15px; font-weight:700; margin:0;">
+                      Docker Orchestration &amp; Virtual Units ({})
+                    </h3>
+                    <div style="font-size:11px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; color:#64748b; margin-top:2px;">
+                      Container runtime instances &bull; {}
+                    </div>
+                  </td>
+                  <td align="right">
+                    <span style="display:inline-block; padding:4px 9px; border-radius:6px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:10px; font-weight:800; background:#f1f5f9; color:#0f172a; border:1px solid #e2e8f0;">
+                      DOCKER ENGINE
+                    </span>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- Docker Container Cards -->
+              {}
+
+              <!-- Collapsible Image Catalog -->
+              {}
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+
+    <!-- NETWORK SERVICES & TCP SOCKET PROBES -->
+    <tr>
+      <td style="padding: 0 0 16px 0;">
+        <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background:#ffffff; border:1px solid #e2e8f0; border-radius:16px; padding:20px; box-shadow:0 1px 3px rgba(0,0,0,0.04);">
+          <tr>
+            <td>
+              <table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-bottom:12px;">
+                <tr>
+                  <td>
+                    <h3 style="color:#0f172a; font-size:15px; font-weight:700; margin:0;">
+                      Network Services &amp; Port Listeners
+                    </h3>
+                    <div style="font-size:11px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; color:#64748b; margin-top:2px;">
+                      Real-time TCP socket probes across cluster ingress
+                    </div>
+                  </td>
+                  <td align="right">
+                    <span style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:10px; color:#059669; font-weight:800;">
+                      TCP SOCKETS
+                    </span>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- Services Grid -->
+              {}
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+
+    <!-- 24H AUDIENCE & TRAFFIC TELEMETRY -->
+    <tr>
+      <td style="padding: 0 0 16px 0;">
+        <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background:#ffffff; border:1px solid #e2e8f0; border-radius:16px; padding:20px; box-shadow:0 1px 3px rgba(0,0,0,0.04);">
+          <tr>
+            <td>
+              <h3 style="color:#0f172a; font-size:15px; font-weight:700; margin:0 0 3px 0;">
+                24h Traffic &amp; Client Telemetry
+              </h3>
+              <div style="font-size:11px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; color:#64748b; margin:0 0 14px 0;">
+                Inbound visitor audience &amp; contact inquiries
+              </div>
+
+              <table class="metric-row" border="0" cellpadding="0" cellspacing="0" width="100%">
+                <tr>
+                  <td class="metric-tile" width="32%" valign="top" style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:12px;">
+                    <div style="font-size:10px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; color:#64748b; text-transform:uppercase; letter-spacing:0.06em; font-weight:700;">PAGE VIEWS</div>
+                    <div style="font-size:24px; font-weight:800; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; color:#059669; margin:3px 0;">{}</div>
+                    <div style="font-size:10px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; color:#64748b;">Recorded visits</div>
+                  </td>
+                  <td class="hide-mobile" width="2%"></td>
+                  <td class="metric-tile" width="32%" valign="top" style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:12px;">
+                    <div style="font-size:10px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; color:#64748b; text-transform:uppercase; letter-spacing:0.06em; font-weight:700;">UNIQUE VISITORS</div>
+                    <div style="font-size:24px; font-weight:800; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; color:#0284c7; margin:3px 0;">{}</div>
+                    <div style="font-size:10px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; color:#64748b;">Distinct client IPs</div>
+                  </td>
+                  <td class="hide-mobile" width="2%"></td>
+                  <td class="metric-tile" width="32%" valign="top" style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:12px;">
+                    <div style="font-size:10px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; color:#64748b; text-transform:uppercase; letter-spacing:0.06em; font-weight:700;">CLIENT MESSAGES</div>
+                    <div style="font-size:24px; font-weight:800; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; color:#7c3aed; margin:3px 0;">{}</div>
+                    <div style="font-size:10px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; color:#64748b;">Inbound inquiries</div>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+
+    <!-- EXPANDABLE REAL-TOUCH DIAGNOSTIC LOGS -->
     {}
 
-    <!-- Docker Orchestration & Image Registry -->
-    <div class="card">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-            <div>
-                <h3 style="color: #ffffff; font-size: 16px;">Docker Orchestration &amp; Virtual Units ({})</h3>
-                <div style="font-size: 11px; font-family: monospace; color: #94a3b8; margin-top: 2px;">Primary container runtime environment</div>
-            </div>
-            <span class="badge" style="background:rgba(137,255,0,0.1); color:#89ff00; border:1px solid rgba(137,255,0,0.3);">
-                DOCKER ENGINE
-            </span>
+    <!-- FOOTER -->
+    <tr>
+      <td style="padding: 16px 8px 30px 8px; text-align: center;">
+        <div style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:11px; font-weight:700; color:#64748b; letter-spacing:0.08em; text-transform:uppercase;">
+          MOHAMMAD FAIZAL &bull; ATELIER CLUSTER TELEMETRY &bull; PURE RUST AXUM ENGINE
         </div>
-        <table>
-            <thead><tr><th>Container Unit</th><th>Image &amp; Footprint</th><th>Health &amp; Status</th><th>Network &amp; Ports</th></tr></thead>
-            <tbody>{}</tbody>
-        </table>
-
-        <!-- Docker Image Catalog -->
-        <div style="margin-top: 20px; border-top: 1px solid rgba(255,255,255,0.06); padding-top: 16px;">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 8px;">
-                <div style="font-family:monospace; font-size:11px; font-weight:700; color:#89ff00; text-transform:uppercase; letter-spacing:0.08em;">
-                    Docker Image Catalog ({})
-                </div>
-                <div style="font-family:monospace; font-size:10px; color:#64748b;">HOST IMAGE CACHE</div>
-            </div>
-            <table>
-                <thead><tr><th>Repository &amp; Tag</th><th>Image ID</th><th>Virtual Size</th><th>Created</th><th style="text-align:center;">Containers</th></tr></thead>
-                <tbody>{}</tbody>
-            </table>
+        <div style="font-size:10px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; color:#94a3b8; margin-top:4px;">
+          Generated: {} &bull; Single-Source Rust Health Daemon &bull; Automated 24h Cron
         </div>
-    </div>
+      </td>
+    </tr>
 
-    <!-- Active Network Services Matrix -->
-    <div class="card">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-            <div>
-                <h3 style="color: #ffffff; font-size: 16px;">Network Services &amp; Port Probes</h3>
-                <div style="font-size: 11px; font-family: monospace; color: #94a3b8; margin-top: 2px;">Real-time TCP socket listeners on host</div>
-            </div>
-            <span style="font-family:monospace; font-size:11px; color:#89ff00; font-weight:700;">TCP SOCKETS</span>
-        </div>
-        <div>{}</div>
-    </div>
-
-    <!-- 24h Traffic & Inquiries Summary -->
-    <div class="card">
-        <h3 style="color: #ffffff; font-size: 16px; margin-bottom: 4px;">24h Traffic & Client Telemetry</h3>
-        <p style="font-size: 12px; font-family: monospace; color: #94a3b8; margin: 0 0 14px 0;">Audience engagement and inbound leads</p>
-        <table style="width:100%; margin:0; border:none;">
-            <tr>
-                <td class="metric-col" style="width:32%;">
-                    <div class="metric-lbl">Page Views</div>
-                    <div class="metric-val" style="color:#89ff00;">{}</div>
-                    <div class="metric-sub">Recorded visits</div>
-                </td>
-                <td style="width:2%;"></td>
-                <td class="metric-col" style="width:32%;">
-                    <div class="metric-lbl">Unique Visitors</div>
-                    <div class="metric-val">{}</div>
-                    <div class="metric-sub">Distinct client IPs</div>
-                </td>
-                <td style="width:2%;"></td>
-                <td class="metric-col" style="width:32%;">
-                    <div class="metric-lbl">Client Messages</div>
-                    <div class="metric-val" style="color:#89ff00;">{}</div>
-                    <div class="metric-sub">Inbound contact queries</div>
-                </td>
-            </tr>
-        </table>
-    </div>
-
-    <!-- Footer -->
-    <div style="text-align: center; color: #64748b; font-family: monospace; font-size: 11px; margin-top: 30px; letter-spacing: 0.05em;">
-        MOHAMMAD FAIZAL &bull; ATELIER CLUSTER TELEMETRY &bull; PURE RUST AXUM
-    </div>
-</div>
+  </table>
+</td>
+</tr>
+</table>
 </body>
 </html>"##,
-        data.hostname, data.platform, data.uptime_formatted,
-        status_bg, status_text_color, status_border, status_text_color, status_text,
-        issues_html,
-        data.hostname, data.platform, data.uptime_formatted,
-        cpu_pct, data.cpu.cores, cpu_pct, cpu_bar_color,
-        mem_pct, format_bytes(data.memory.used_bytes), format_bytes(data.memory.total_bytes), mem_pct, mem_bar_color,
-        disk_pct, format_bytes(data.disk.used_bytes), format_bytes(data.disk.total_bytes), disk_pct, disk_bar_color,
-        slave_section,
-        data.docker.len(), docker_rows,
-        data.docker_images.len(), docker_images_rows,
-        service_grid,
-        data.analytics24h.views, data.analytics24h.unique_visitors, data.analytics24h.messages_received
+        reporting_node_label, data.platform, data.uptime_formatted,
+        hero_status_banner,
+        data.platform, data.uptime_formatted,
+        n1_cpu_pct, data.cpu.cores, n1_cpu_pct, n1_cpu_bar,
+        n1_mem_pct, format_bytes(data.memory.used_bytes), format_bytes(data.memory.total_bytes), n1_mem_pct, n1_mem_bar,
+        n1_disk_pct, format_bytes(data.disk.used_bytes), format_bytes(data.disk.total_bytes), n1_disk_pct, n1_disk_bar,
+        node_02_card,
+        data.docker.len(), docker_summary_text,
+        docker_containers_html,
+        docker_images_collapsible,
+        services_grid_html,
+        data.analytics24h.views, data.analytics24h.unique_visitors, data.analytics24h.messages_received,
+        diagnostic_logs_section,
+        gen_time
     )
 }
 
 pub async fn run_scheduled_reporter(config: AppConfig, db: DbPool) {
+    // OPTION 2 FIX: Gatekeeper to ensure ONLY Master Core runs the daily report.
+    // Standby worker node (container-of-souls) exits immediately, preventing duplicate
+    // and false-alarm 1:30 PM warning emails.
+    if config.is_standby() {
+        warn!(
+            "Node '{}' detected as STANDBY / WORKER (NODE_ROLE={}). Scheduled 24h health email runner is DISABLED on this instance to prevent false alarms.",
+            config.node_name,
+            config.node_role
+        );
+        return;
+    }
+
+    info!(
+        "Scheduled 24h health reporter activated for Primary Ingress node '{}' (NODE_ROLE={})",
+        config.node_name,
+        config.node_role
+    );
+
     loop {
         sleep(Duration::from_secs(60)).await;
 
@@ -1072,7 +1376,7 @@ pub async fn run_scheduled_reporter(config: AppConfig, db: DbPool) {
             let health_data = collect_system_health(&db).await;
             let html = generate_report_html(&health_data);
             let subject = format!(
-                "[{}] Faizal VM 24h Health Report — {}",
+                "[{}] Atelier Cluster 24h Health Report - {}",
                 health_data.overall_status,
                 now.format("%b %d, %Y")
             );
@@ -1101,4 +1405,3 @@ pub async fn run_scheduled_reporter(config: AppConfig, db: DbPool) {
         }
     }
 }
-

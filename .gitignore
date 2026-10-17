@@ -28,3 +28,8 @@ frontend/dist-admin/
 .DS_Store
 Thumbs.db
 .vscode/
+
+# Preview & Scratch artifacts
+preview_*.html
+__pycache__/
+*.pyc

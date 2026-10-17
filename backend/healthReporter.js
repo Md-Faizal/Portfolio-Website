@@ -1,3 +1,17 @@
+/**
+ * =============================================================================
+ * DEPRECATED - ARCHIVE REFERENCE ONLY
+ * =============================================================================
+ * Automated 24h Health Reporting, Anomaly Audits, and Email Telemetry have been
+ * officially migrated and centralized into the compiled Rust Axum backend:
+ *   --> backend-rust/src/health.rs
+ *   --> backend-rust/src/mailer.rs
+ *
+ * This JavaScript file is retained purely as historical reference and is no
+ * longer executed in production.
+ * =============================================================================
+ */
+
 const os = require('os');
 const { exec, execSync } = require('child_process');
 const fs = require('fs');

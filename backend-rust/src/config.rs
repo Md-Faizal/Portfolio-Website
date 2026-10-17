@@ -16,9 +16,23 @@ pub struct AppConfig {
     pub smtp_tls: String,
     pub sender_name: String,
     pub sender_email: String,
+    // ── Cluster Topology & Role ──────────────────────────────────────────────
+    pub node_role: String,
+    pub node_name: String,
 }
 
 impl AppConfig {
+    pub fn is_standby(&self) -> bool {
+        let hostname = sysinfo::System::host_name().unwrap_or_default().to_lowercase();
+        self.node_role.eq_ignore_ascii_case("standby")
+            || self.node_name.to_lowercase().contains("container-of-souls")
+            || hostname.contains("container-of-souls")
+    }
+
+    pub fn is_primary(&self) -> bool {
+        !self.is_standby()
+    }
+
     pub fn from_env() -> Self {
         let port = std::env::var("PORT")
             .ok()
@@ -64,6 +78,16 @@ impl AppConfig {
             }),
         );
 
+        let node_role = std::env::var("NODE_ROLE").unwrap_or_else(|_| "primary".into());
+        let host_name = sysinfo::System::host_name().unwrap_or_default();
+        let node_name = std::env::var("NODE_NAME").unwrap_or_else(|_| {
+            if host_name.contains("container-of-souls") {
+                "container-of-souls".into()
+            } else {
+                "macos".into()
+            }
+        });
+
         Self {
             port,
             db_path,
@@ -88,6 +112,8 @@ impl AppConfig {
                 .unwrap_or_else(|_| "Faizal VM Health Monitor".into()),
             sender_email: std::env::var("SENDER_EMAIL")
                 .unwrap_or_else(|_| "reports@faizal.uk".into()),
+            node_role,
+            node_name,
         }
     }
-}
+}\n
