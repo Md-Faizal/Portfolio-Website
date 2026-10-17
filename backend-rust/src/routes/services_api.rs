@@ -102,7 +102,7 @@ async fn bloomberg_terminal_status() -> &'static str {
 
 pub async fn list_services(State(_state): State<SharedState>) -> impl IntoResponse {
     // Probe ports concurrently
-    let (cs_online, mc_online, stall_admin, stall_smtps, stall_imap, nexus_online) = tokio::join!(
+    let (cs_online, mc_online, _stall_admin, stall_smtps, stall_imap, nexus_online) = tokio::join!(
         check_tcp_port(3005),
         check_tcp_port(5000),
         check_tcp_port(8080),

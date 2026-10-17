@@ -116,4 +116,4 @@ impl AppConfig {
             node_name,
         }
     }
-}\n
+}

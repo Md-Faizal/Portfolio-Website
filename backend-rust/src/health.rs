@@ -291,7 +291,7 @@ pub async fn get_24h_metrics_summary(db: &DbPool, node_id: &str, cur_cpu: f64, c
     };
 
     // Hourly buckets for the 24-hour histogram graph
-    let mut stmt = conn.prepare(
+    let stmt = conn.prepare(
         r#"SELECT 
             strftime('%H:00', timestamp) as hr,
             ROUND(AVG(cpu_percent), 1),
@@ -877,7 +877,7 @@ pub async fn collect_system_health(db: &DbPool) -> SystemHealthData {
 }
 
 pub fn generate_report_html(data: &SystemHealthData) -> String {
-    let is_critical = data.overall_status == "CRITICAL";
+    let _is_critical = data.overall_status == "CRITICAL";
     let is_warning = data.overall_status == "WARNING";
     let is_healthy = data.overall_status == "HEALTHY";
 
