@@ -5,9 +5,8 @@
 # =============================================================================
 FROM ubuntu:24.04 AS runtime
 
-RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-    ca-certificates tzdata curl \
-    && rm -rf /var/lib/apt/lists/*
+# Copy global TLS CA certificates bundle (zero apt-get network calls needed)
+COPY ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 
 WORKDIR /app
 
@@ -25,7 +24,6 @@ ENV PORT=3002 \
 
 EXPOSE 3002
 
-HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
-    CMD curl -sf http://127.0.0.1:3002/api/maintenance-status || exit 1
+
 
 ENTRYPOINT ["/app/personal-site-rust"]

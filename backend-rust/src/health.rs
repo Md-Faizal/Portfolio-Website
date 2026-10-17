@@ -877,50 +877,64 @@ pub async fn collect_system_health(db: &DbPool) -> SystemHealthData {
 }
 
 pub fn generate_report_html(data: &SystemHealthData) -> String {
-    let _is_critical = data.overall_status == "CRITICAL";
+    let is_critical = data.overall_status == "CRITICAL";
     let is_warning = data.overall_status == "WARNING";
     let is_healthy = data.overall_status == "HEALTHY";
 
-    // Operational Status Badge (Enterprise Standard)
-    let (status_badge_bg, status_badge_border, status_badge_text, status_badge_label) = if is_healthy {
-        ("#ecfdf5", "#bbf7d0", "#15803d", "● OPERATIONAL")
-    } else if is_warning {
-        ("#fffbeb", "#fde68a", "#b45309", "▲ WARNING")
+    // Dynamic Hero Status Banner
+    let hero_status_banner = if is_healthy {
+        r#"<table border="0" cellpadding="0" cellspacing="0" width="100%" style="background:#ecfdf5; border:1px solid #a7f3d0; border-left:4px solid #10b981; border-radius:12px; padding:16px 20px; margin-bottom:16px;">
+          <tr>
+            <td valign="middle">
+              <div style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:12px; font-weight:800; color:#047857; letter-spacing:0.08em; text-transform:uppercase;">
+                ● ALL SYSTEMS OPERATIONAL
+              </div>
+              <div style="font-size:12px; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; color:#065f46; margin-top:3px; font-weight:500;">
+                ✓ Zero critical health anomalies detected across cluster nodes in the past 24 hours.
+              </div>
+            </td>
+          </tr>
+        </table>"#
     } else {
-        ("#fef2f2", "#fecaca", "#b91c1c", "■ DEGRADED")
-    };
+        let (border_c, title_c, badge_text, bg_c) = if is_critical {
+            ("#f87171", "#b91c1c", "CRITICAL ANOMALIES DETECTED", "#fef2f2")
+        } else {
+            ("#fcd34d", "#b45309", "SYSTEM WARNINGS DETECTED", "#fffbeb")
+        };
 
-    // Issues list if any
-    let anomalies_banner = if !data.health_issues.is_empty() {
-        let mut list_html = String::new();
+        let mut issues_items = String::new();
         for issue in &data.health_issues {
-            list_html.push_str(&format!(
-                r#"<li style="color:#b91c1c; font-family:SFMono-Regular,Menlo,Monaco,Consolas,monospace; font-size:12px; margin-bottom:4px;">{}</li>"#,
+            issues_items.push_str(&format!(
+                r#"<li style="color:#b91c1c; margin-bottom:5px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:12px; font-weight:600;">⚠ {}</li>"#,
                 issue
             ));
         }
-        format!(
-            r#"<table border="0" cellpadding="0" cellspacing="0" width="100%" style="background:#fef2f2; border:1px solid #fecaca; border-left:3px solid #dc2626; border-radius:6px; padding:12px 16px; margin-bottom:16px;">
+
+        &format!(
+            r#"<table border="0" cellpadding="0" cellspacing="0" width="100%" style="background:{}; border:1px solid {}; border-left:4px solid {}; border-radius:12px; padding:16px 20px; margin-bottom:16px;">
               <tr>
-                <td>
-                  <div style="font-family:SFMono-Regular,Menlo,Monaco,Consolas,monospace; font-size:11px; font-weight:700; color:#b91c1c; text-transform:uppercase; letter-spacing:0.05em; margin-bottom:6px;">
-                    Active Anomaly Flags ({}):
+                <td valign="middle">
+                  <div style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:12px; font-weight:800; color:{}; letter-spacing:0.08em; text-transform:uppercase;">
+                    ▲ {}
                   </div>
-                  <ul style="margin:0; padding-left:18px;">{}</ul>
+                  <div style="font-size:12px; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; color:#475569; margin-top:3px; margin-bottom:8px;">
+                    Cluster telemetry flagged the following observations:
+                  </div>
+                  <ul style="margin:0; padding-left:18px;">
+                    {}
+                  </ul>
                 </td>
               </tr>
             </table>"#,
-            data.health_issues.len(),
-            list_html
+            bg_c, border_c, border_c, title_c, badge_text, issues_items
         )
-    } else {
-        String::new()
     };
 
-    // 24h Average Metrics
+    // 24h Average Metrics for Node 01 (macos [PRIMARY])
     let m = &data.metrics24h;
     let avg_cpu = m.avg_cpu;
     let peak_cpu = m.peak_cpu;
+    let min_cpu = m.min_cpu;
     let avg_ram_pct = m.avg_ram_pct;
     let peak_ram_pct = m.peak_ram_pct;
     let avg_ram_bytes = m.avg_ram_bytes;
@@ -931,7 +945,11 @@ pub fn generate_report_html(data: &SystemHealthData) -> String {
     let delta_sign = if disk_delta >= 0.0 { "+" } else { "" };
     let delta_color = if disk_delta.abs() > 3.0 { "#b45309" } else { "#64748b" };
 
-    // 24H Interactive Histogram Sparkline (CSS/HTML bar chart)
+    let n1_cpu_bar = if avg_cpu > 85.0 { "#ef4444" } else if avg_cpu > 70.0 { "#f59e0b" } else { "#10b981" };
+    let n1_mem_bar = if avg_ram_pct > 85.0 { "#ef4444" } else if avg_ram_pct > 70.0 { "#f59e0b" } else { "#10b981" };
+    let n1_disk_bar = if avg_disk_pct > 85.0 { "#ef4444" } else if avg_disk_pct > 70.0 { "#f59e0b" } else { "#10b981" };
+
+    // 24H Interactive Histogram Sparkline (Hourly Buckets)
     let mut sparkline_bars = String::new();
     let sample_count = m.hourly_series.len().max(1);
     let bar_width_pct = format!("{:.2}", (100.0 / sample_count as f64) * 0.85);
@@ -940,11 +958,11 @@ pub fn generate_report_html(data: &SystemHealthData) -> String {
         let bar_height_px = ((pt.avg_cpu / 100.0) * 44.0).clamp(3.0, 44.0) as u32;
         let peak_bar_height_px = ((pt.peak_cpu / 100.0) * 44.0).clamp(3.0, 44.0) as u32;
         let bar_color = if pt.peak_cpu >= 85.0 {
-            "#dc2626"
+            "#ef4444"
         } else if pt.peak_cpu >= 70.0 {
-            "#d97706"
+            "#f59e0b"
         } else {
-            "#16a34a"
+            "#10b981"
         };
 
         sparkline_bars.push_str(&format!(
@@ -964,45 +982,145 @@ pub fn generate_report_html(data: &SystemHealthData) -> String {
         ));
     }
 
-    // Node 01: Hostname 'macos' [PRIMARY]
-    let n1_name = "macos";
-    let n1_ip = "10.0.0.86";
-    let n1_badge = r#"<span style="display:inline-block; padding:2px 6px; border-radius:4px; font-family:SFMono-Regular,Menlo,Monaco,Consolas,monospace; font-size:10px; font-weight:700; background:#f1f5f9; color:#0f172a; border:1px solid #cbd5e1; vertical-align:middle; margin-left:6px;">PRIMARY</span>"#;
-
-    // Node 02: Hostname 'container-of-souls' [BACKUP]
-    let (n2_status_pill, n2_details_html) = if let Some(ref slave) = data.slave {
+    // Node 02 Card (container-of-souls [BACKUP])
+    let node_02_card = if let Some(ref slave) = data.slave {
         let is_online = slave.get("status").and_then(|s| s.as_str()) == Some("online");
-        let badge = if is_online {
-            r#"<span style="font-family:SFMono-Regular,Menlo,Monaco,Consolas,monospace; font-size:11px; font-weight:700; color:#15803d; background:#ecfdf5; border:1px solid #bbf7d0; padding:2px 8px; border-radius:4px;">ONLINE</span>"#
-        } else {
-            r#"<span style="font-family:SFMono-Regular,Menlo,Monaco,Consolas,monospace; font-size:11px; font-weight:700; color:#b91c1c; background:#fef2f2; border:1px solid #fecaca; padding:2px 8px; border-radius:4px;">OFFLINE</span>"#
-        };
+        let badge_bg = if is_online { "#ecfdf5" } else { "#fef2f2" };
+        let badge_color = if is_online { "#047857" } else { "#b91c1c" };
+        let badge_border = if is_online { "#a7f3d0" } else { "#fecaca" };
+        let badge_text = if is_online { "ONLINE // RESPONSIVE" } else { "OFFLINE // UNREACHABLE" };
 
-        let slave_uptime = slave.get("uptime").and_then(|u| u.as_u64()).map(format_uptime).unwrap_or_else(|| "N/A".into());
-        let s_cpu = slave.get("cpu").and_then(|c| c.get("loadPercent")).and_then(|p| p.as_f64()).unwrap_or(0.0).round() as u64;
-        let s_mem = slave.get("memory").and_then(|m| m.get("usedPercent")).and_then(|p| p.as_f64()).unwrap_or(0.0).round() as u64;
-        let s_disk = slave.get("disk").and_then(|d| d.get("usedPercent")).and_then(|p| p.as_f64()).unwrap_or(0.0).round() as u64;
+        let slave_os = slave.get("os").and_then(|s| s.as_str()).unwrap_or("Ubuntu 24.04 LTS");
+        let slave_uptime_secs = slave.get("uptime").and_then(|u| u.as_u64()).unwrap_or(0);
+        let slave_uptime = format_uptime(slave_uptime_secs);
 
-        (badge, format!("Uptime: {} &bull; CPU: {}% &bull; RAM: {}% &bull; Disk: {}% &bull; Tunnel 127.0.0.1:9100 Connected", slave_uptime, s_cpu, s_mem, s_disk))
-    } else {
-        (
-            r#"<span style="font-family:SFMono-Regular,Menlo,Monaco,Consolas,monospace; font-size:11px; font-weight:700; color:#64748b; background:#f8fafc; border:1px solid #e2e8f0; padding:2px 8px; border-radius:4px;">STANDBY // UNREACHABLE</span>"#,
-            "Tunnel socket (127.0.0.1:9100) unresponsive. Backup node standby.".to_string(),
+        let slave_cpu_pct = slave.get("cpu").and_then(|c| c.get("loadPercent")).and_then(|p| p.as_f64()).unwrap_or(0.0).round() as u64;
+        let slave_cores = slave.get("cpu").and_then(|c| c.get("cores")).and_then(|p| p.as_u64()).unwrap_or(2);
+        let slave_l1 = slave.get("cpu").and_then(|c| c.get("loadAvg")).and_then(|a| a.get(0)).and_then(|v| v.as_f64()).unwrap_or(0.0);
+        let slave_l5 = slave.get("cpu").and_then(|c| c.get("loadAvg")).and_then(|a| a.get(1)).and_then(|v| v.as_f64()).unwrap_or(0.0);
+
+        let slave_mem_pct = slave.get("memory").and_then(|m| m.get("usedPercent")).and_then(|p| p.as_f64()).unwrap_or(0.0).round() as u64;
+        let slave_used_mem = slave.get("memory").and_then(|m| m.get("usedBytes")).and_then(|b| b.as_u64()).unwrap_or(0);
+        let slave_total_mem = slave.get("memory").and_then(|m| m.get("totalBytes")).and_then(|b| b.as_u64()).unwrap_or(0);
+
+        let slave_disk_pct = slave.get("disk").and_then(|d| d.get("usedPercent")).and_then(|p| p.as_f64()).unwrap_or(0.0).round() as u64;
+        let slave_used_disk = slave.get("disk").and_then(|d| d.get("usedBytes")).and_then(|b| b.as_u64()).unwrap_or(0);
+        let slave_total_disk = slave.get("disk").and_then(|d| d.get("totalBytes")).and_then(|b| b.as_u64()).unwrap_or(0);
+
+        let s_cpu_bar = if slave_cpu_pct > 85 { "#ef4444" } else if slave_cpu_pct > 70 { "#f59e0b" } else { "#10b981" };
+        let s_mem_bar = if slave_mem_pct > 85 { "#ef4444" } else if slave_mem_pct > 70 { "#f59e0b" } else { "#10b981" };
+        let s_disk_bar = if slave_disk_pct > 85 { "#ef4444" } else if slave_disk_pct > 70 { "#f59e0b" } else { "#10b981" };
+
+        let mut daemons_html = String::new();
+        if let Some(services) = slave.get("services").and_then(|s| s.as_array()) {
+            for svc in services {
+                let name = svc.get("name").and_then(|n| n.as_str()).unwrap_or("");
+                let st = svc.get("status").and_then(|s| s.as_str()).unwrap_or("unknown");
+                let is_act = st == "active";
+                let (dot_c, text_c, bg_c) = if is_act { ("#10b981", "#047857", "#ecfdf5") } else { ("#ef4444", "#b91c1c", "#fef2f2") };
+                daemons_html.push_str(&format!(
+                    r#"<span style="display:inline-flex; align-items:center; margin-right:8px; margin-bottom:6px; padding:4px 9px; border-radius:6px; background:{}; border:1px solid rgba(0,0,0,0.06); font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:11px; color:#334155;"><span style="display:inline-block; width:6px; height:6px; border-radius:50%; background:{}; margin-right:6px;"></span>{}: <strong style="color:{}; margin-left:4px;">{}</strong></span>"#,
+                    bg_c, dot_c, name, text_c, st.to_uppercase()
+                ));
+            }
+        }
+
+        format!(
+            r#"<table border="0" cellpadding="0" cellspacing="0" width="100%" style="background:#ffffff; border:1px solid #e2e8f0; border-radius:16px; padding:20px; box-shadow:0 1px 3px rgba(0,0,0,0.04); margin-bottom:16px;">
+              <tr>
+                <td>
+                  <table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-bottom:14px;">
+                    <tr>
+                      <td valign="top">
+                        <div style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:10px; font-weight:800; color:#0284c7; letter-spacing:0.12em; text-transform:uppercase;">
+                          STANDBY COMPUTE &bull; BACKUP NODE
+                        </div>
+                        <div style="color:#0f172a; font-size:16px; font-weight:700; margin-top:2px;">
+                          container-of-souls <span style="display:inline-block; padding:2px 6px; border-radius:4px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:10px; font-weight:700; background:#f1f5f9; color:#475569; border:1px solid #cbd5e1; vertical-align:middle; margin-left:4px;">BACKUP</span>
+                        </div>
+                        <div style="font-size:11px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; color:#64748b; margin-top:2px;">
+                          Platform: {} &bull; Uptime: {} &bull; <span style="color:#059669; font-weight:600;">Tunnel 127.0.0.1:9100 Connected</span>
+                        </div>
+                      </td>
+                      <td align="right" valign="top">
+                        <span style="display:inline-block; padding:4px 9px; border-radius:6px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:10px; font-weight:800; background:{}; color:{}; border:1px solid {}; text-transform:uppercase;">
+                          ● {}
+                        </span>
+                      </td>
+                    </tr>
+                  </table>
+
+                  <table class="metric-row" border="0" cellpadding="0" cellspacing="0" width="100%">
+                    <tr>
+                      <td class="metric-tile" width="32%" valign="top" style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:12px;">
+                        <div style="font-size:10px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; color:#64748b; text-transform:uppercase; letter-spacing:0.06em; font-weight:700;">CPU LOAD</div>
+                        <div style="font-size:22px; font-weight:800; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; color:#0f172a; margin:3px 0;">{}%</div>
+                        <div style="font-size:10px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; color:#64748b;">{} Cores &bull; {:.2}, {:.2}</div>
+                        <div style="height:5px; background:#e2e8f0; border-radius:2px; margin-top:8px; overflow:hidden;">
+                          <div style="height:100%; width:{}%; background:{}; border-radius:2px;"></div>
+                        </div>
+                      </td>
+                      <td class="hide-mobile" width="2%"></td>
+                      <td class="metric-tile" width="32%" valign="top" style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:12px;">
+                        <div style="font-size:10px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; color:#64748b; text-transform:uppercase; letter-spacing:0.06em; font-weight:700;">RAM USAGE</div>
+                        <div style="font-size:22px; font-weight:800; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; color:#0f172a; margin:3px 0;">{}%</div>
+                        <div style="font-size:10px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; color:#64748b;">{} / {}</div>
+                        <div style="height:5px; background:#e2e8f0; border-radius:2px; margin-top:8px; overflow:hidden;">
+                          <div style="height:100%; width:{}%; background:{}; border-radius:2px;"></div>
+                        </div>
+                      </td>
+                      <td class="hide-mobile" width="2%"></td>
+                      <td class="metric-tile" width="32%" valign="top" style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:12px;">
+                        <div style="font-size:10px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; color:#64748b; text-transform:uppercase; letter-spacing:0.06em; font-weight:700;">DISK (/)</div>
+                        <div style="font-size:22px; font-weight:800; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; color:#0f172a; margin:3px 0;">{}%</div>
+                        <div style="font-size:10px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; color:#64748b;">{} / {}</div>
+                        <div style="height:5px; background:#e2e8f0; border-radius:2px; margin-top:8px; overflow:hidden;">
+                          <div style="height:100%; width:{}%; background:{}; border-radius:2px;"></div>
+                        </div>
+                      </td>
+                    </tr>
+                  </table>
+
+                  <div style="margin-top:12px; padding-top:10px; border-top:1px solid #f1f5f9;">
+                    <div style="font-size:10px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; color:#64748b; text-transform:uppercase; letter-spacing:0.06em; font-weight:700; margin-bottom:6px;">SUPERVISED STANDBY SERVICES</div>
+                    <div>{}</div>
+                  </div>
+                </td>
+              </tr>
+            </table>"#,
+            slave_os, slave_uptime,
+            badge_bg, badge_color, badge_border, badge_text,
+            slave_cpu_pct, slave_cores, slave_l1, slave_l5, slave_cpu_pct, s_cpu_bar,
+            slave_mem_pct, format_bytes(slave_used_mem), format_bytes(slave_total_mem), slave_mem_pct, s_mem_bar,
+            slave_disk_pct, format_bytes(slave_used_disk), format_bytes(slave_total_disk), slave_disk_pct, s_disk_bar,
+            daemons_html
         )
+    } else {
+        r#"<table border="0" cellpadding="0" cellspacing="0" width="100%" style="background:#ffffff; border:1px solid #e2e8f0; border-radius:16px; padding:20px; box-shadow:0 1px 3px rgba(0,0,0,0.04); margin-bottom:16px;">
+          <tr>
+            <td>
+              <div style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:10px; font-weight:800; color:#64748b; letter-spacing:0.12em; text-transform:uppercase;">
+                STANDBY COMPUTE &bull; BACKUP NODE
+              </div>
+              <div style="color:#0f172a; font-size:16px; font-weight:700; margin-top:2px;">
+                container-of-souls <span style="display:inline-block; padding:2px 6px; border-radius:4px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:10px; font-weight:700; background:#f1f5f9; color:#475569; border:1px solid #cbd5e1; vertical-align:middle; margin-left:4px;">BACKUP</span>
+              </div>
+              <div style="font-size:12px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; color:#b45309; margin-top:6px;">
+                ⚠ Standby node tunnel (127.0.0.1:9100) unresponsive. Backup worker running in standby.
+              </div>
+            </td>
+          </tr>
+        </table>"#.to_string()
     };
 
     // Docker Containers List & Restart Warning
-    let mut docker_rows = String::new();
+    let mut docker_containers_html = String::new();
     let mut total_restarts = 0;
 
     for c in &data.docker {
         total_restarts += c.restart_count;
         let is_running = c.state == "running";
-        let (dot_c, state_label) = if is_running {
-            ("#16a34a", "Running")
-        } else {
-            ("#64748b", "Stopped")
-        };
+        let (dot_c, state_text) = if is_running { ("#10b981", "RUNNING") } else { ("#ef4444", "STOPPED") };
 
         let restart_badge = if c.restart_count > 0 {
             format!(r#"<span style="color:#b45309; font-weight:700; margin-left:8px;">(⚠ {} restarts)</span>"#, c.restart_count)
@@ -1010,61 +1128,69 @@ pub fn generate_report_html(data: &SystemHealthData) -> String {
             String::new()
         };
 
-        docker_rows.push_str(&format!(
-            r#"<tr style="border-bottom:1px solid #f1f5f9;">
-                <td style="padding:7px 0; font-family:SFMono-Regular,Menlo,Monaco,Consolas,monospace; font-size:12px; color:#0f172a; font-weight:600;">
-                  <span style="display:inline-block; width:6px; height:6px; border-radius:50%; background:{dot_c}; margin-right:6px; vertical-align:middle;"></span>
-                  {name}
-                  {restart_badge}
-                </td>
-                <td style="padding:7px 0; font-family:SFMono-Regular,Menlo,Monaco,Consolas,monospace; font-size:11px; color:#64748b;" align="right">
-                  {state_label} &bull; {net}
-                </td>
-              </tr>"#,
-            dot_c = dot_c,
-            name = c.name,
-            restart_badge = restart_badge,
-            state_label = state_label,
-            net = if !c.ports.is_empty() { &c.ports } else { &c.network }
+        docker_containers_html.push_str(&format!(
+            r#"<div style="display:flex; justify-content:space-between; align-items:center; padding:9px 12px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; margin-bottom:8px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:11px;">
+                <div>
+                  <span style="display:inline-block; width:7px; height:7px; border-radius:50%; background:{}; margin-right:8px; vertical-align:middle;"></span>
+                  <strong style="color:#0f172a; font-size:12px;">{}</strong>
+                  <span style="color:#64748b; margin-left:8px;">{}</span>
+                  {}
+                </div>
+                <div style="color:#475569; font-size:11px; text-align:right;">
+                  <span style="color:#059669; font-weight:700;">{}</span> &bull; {}
+                </div>
+              </div>"#,
+            dot_c, c.name, c.image, restart_badge, state_text, if !c.ports.is_empty() { &c.ports } else { &c.network }
         ));
     }
 
-    // Network Service Probes
-    let mut service_items = String::new();
-    for s in &data.services {
-        let is_up = s.status.eq_ignore_ascii_case("online");
-        let (color, mark) = if is_up { ("#15803d", "✓") } else { ("#dc2626", "✗") };
-        service_items.push_str(&format!(
-            r#"<span style="display:inline-block; margin-right:12px; margin-bottom:6px; font-family:SFMono-Regular,Menlo,Monaco,Consolas,monospace; font-size:11px; color:#334155;">
-                <strong style="color:{color}; margin-right:4px;">{mark}</strong>{name} <span style="color:#64748b;">(:{port})</span>
-              </span>"#,
-            color = color,
-            mark = mark,
-            name = s.name,
-            port = s.port
+    let docker_summary_text = if data.docker_summary.unhealthy > 0 {
+        format!(r#"<span style="color:#ef4444; font-weight:700;">⚠ {} Unhealthy</span>"#, data.docker_summary.unhealthy)
+    } else {
+        format!(r#"<span style="color:#059669; font-weight:700;">✓ All {} Running Healthy</span>"#, data.docker_summary.running)
+    };
+
+    // Services Grid
+    let mut services_grid_html = String::new();
+    for svc in &data.services {
+        let is_up = svc.status.eq_ignore_ascii_case("online");
+        let (dot_c, text_c, bg_c) = if is_up { ("#10b981", "#047857", "#ecfdf5") } else { ("#ef4444", "#b91c1c", "#fef2f2") };
+        services_grid_html.push_str(&format!(
+            r#"<span style="display:inline-flex; align-items:center; margin-right:8px; margin-bottom:6px; padding:5px 10px; border-radius:6px; background:{}; border:1px solid rgba(0,0,0,0.06); font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:11px; color:#334155;"><span style="display:inline-block; width:6px; height:6px; border-radius:50%; background:{}; margin-right:6px;"></span>{}: <strong style="color:{}; margin-left:4px;">:{}</strong></span>"#,
+            bg_c, dot_c, svc.name, text_c, svc.port
         ));
     }
 
-    // Diagnostic Traces
-    let diagnostic_section = if data.errors24h.total_error_count > 0 {
-        let mut lines = String::new();
+    // Expandable Incident Diagnostic Logs
+    let diagnostic_logs_section = if data.errors24h.total_error_count > 0 {
+        let mut err_lines = String::new();
         for l in &data.errors24h.systemd {
-            lines.push_str(&format!("systemd: {}\n", l));
+            err_lines.push_str(&format!("systemd: {}\n", l));
         }
         for l in &data.errors24h.nginx {
-            lines.push_str(&format!("nginx: {}\n", l));
+            err_lines.push_str(&format!("nginx: {}\n", l));
         }
         format!(
-            r#"<details style="margin-top:10px; cursor:pointer;">
-                <summary style="font-family:SFMono-Regular,Menlo,Monaco,Consolas,monospace; font-size:11px; font-weight:700; color:#b45309; outline:none; user-select:none;">
-                  ▸ Inspect {} Incident Diagnostic Traces
-                </summary>
-                <div style="margin-top:8px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:6px; padding:10px; max-height:220px; overflow-y:auto;">
-                  <pre style="margin:0; font-family:SFMono-Regular,Menlo,Monaco,Consolas,monospace; font-size:10px; color:#334155; line-height:1.4; white-space:pre-wrap;">{}</pre>
-                </div>
-              </details>"#,
+            r#"<tr>
+              <td style="padding: 0 0 16px 0;">
+                <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background:#ffffff; border:1px solid #e2e8f0; border-radius:16px; padding:20px; box-shadow:0 1px 3px rgba(0,0,0,0.04);">
+                  <tr>
+                    <td>
+                      <details style="cursor:pointer;">
+                        <summary style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:12px; font-weight:800; color:#b45309; outline:none;">
+                          ▸ Inspect {} Incident Diagnostic Traces &amp; Service Logs
+                        </summary>
+                        <div style="margin-top:10px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:12px; max-height:220px; overflow-y:auto;">
+                          <pre style="margin:0; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:10px; color:#334155; line-height:1.45; white-space:pre-wrap;">{}</pre>
+                        </div>
+                      </details>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>"#,
             data.errors24h.total_error_count,
-            lines
+            err_lines
         )
     } else {
         String::new()
@@ -1074,324 +1200,317 @@ pub fn generate_report_html(data: &SystemHealthData) -> String {
 
     format!(
         r##"<!DOCTYPE html>
-<html lang="en">
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Daily Operations &amp; Infrastructure Digest</title>
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<title>24h System Health &amp; Supervision Report</title>
 <style>
-  body {{ margin:0 !important; padding:0 !important; width:100% !important; background-color:#f8fafc !important; color:#0f172a; font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; -webkit-font-smoothing:antialiased; }}
-  table {{ border-collapse:collapse; }}
-  .container {{ max-width:600px; width:100%; margin:0 auto; background:#ffffff; border:1px solid #e2e8f0; border-radius:8px; overflow:hidden; }}
-  .header {{ padding:20px 24px; border-bottom:1px solid #e2e8f0; }}
-  .section {{ padding:20px 24px; border-bottom:1px solid #e2e8f0; }}
-  .metric-card {{ background:#f8fafc; border:1px solid #e2e8f0; border-radius:6px; padding:14px; }}
-  .btn {{ display:inline-block; padding:8px 14px; font-size:11px; font-weight:600; font-family:SFMono-Regular,Menlo,Monaco,Consolas,monospace; text-decoration:none; border-radius:6px; }}
-  @media only screen and (max-width: 600px) {{
-    .metric-cell {{ display:block !important; width:100% !important; margin-bottom:8px !important; }}
-    .hide-mobile {{ display:none !important; }}
+  body, table, td, a {{ -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; }}
+  body {{ margin: 0 !important; padding: 0 !important; width: 100% !important; background-color: #f1f5f9 !important; color: #0f172a; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; -webkit-font-smoothing: antialiased; }}
+  .touch-btn {{ display: inline-block !important; min-height: 42px !important; line-height: 42px !important; padding: 0 16px !important; text-align: center !important; text-decoration: none !important; font-weight: 700 !important; font-size: 11px !important; border-radius: 10px !important; box-sizing: border-box !important; }}
+  @media only screen and (max-width: 620px) {{
+    .email-container {{ width: 100% !important; max-width: 100% !important; }}
+    .fluid-cell {{ display: block !important; width: 100% !important; box-sizing: border-box !important; padding-left: 0 !important; padding-right: 0 !important; margin-bottom: 8px !important; }}
+    .metric-row {{ display: block !important; width: 100% !important; }}
+    .metric-tile {{ display: block !important; width: 100% !important; margin-bottom: 8px !important; box-sizing: border-box !important; }}
+    .header-logo-td {{ display: block !important; width: 100% !important; text-align: left !important; margin-bottom: 12px !important; }}
+    .header-text-td {{ display: block !important; width: 100% !important; }}
+    .action-bar-btn {{ display: block !important; width: 100% !important; margin-bottom: 8px !important; text-align: center !important; padding-left: 0 !important; padding-right: 0 !important; }}
+    .hide-mobile {{ display: none !important; }}
   }}
 </style>
 </head>
-<body style="margin:0; padding:24px 10px; background-color:#f8fafc; color:#0f172a;">
-<table border="0" cellpadding="0" cellspacing="0" width="100%">
+<body style="margin:0; padding:24px 8px; background-color:#f1f5f9; color:#0f172a;">
+<table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color:#f1f5f9; margin:0; padding:0;">
 <tr>
-<td align="center">
-  <div class="container">
+<td align="center" style="padding: 10px 4px;">
+  
+  <table class="email-container" border="0" cellpadding="0" cellspacing="0" width="640" style="max-width:640px; width:100%; margin:0 auto;">
     
-    <!-- HEADER -->
-    <div class="header">
-      <table border="0" cellpadding="0" cellspacing="0" width="100%">
-        <tr>
-          <td>
-            <div style="font-family:SFMono-Regular,Menlo,Monaco,Consolas,monospace; font-size:10px; font-weight:700; color:#64748b; letter-spacing:0.08em; text-transform:uppercase;">
-              MOHAMMAD FAIZAL &bull; INFRASTRUCTURE
-            </div>
-            <h1 style="font-size:17px; font-weight:700; color:#0f172a; margin:4px 0 2px 0;">
-              Daily Infrastructure Digest
-            </h1>
-            <div style="font-size:11px; font-family:SFMono-Regular,Menlo,Monaco,Consolas,monospace; color:#64748b;">
-              Window: Past 24 Hours &bull; Dispatched: {gen_time}
-            </div>
-          </td>
-          <td align="right" valign="top">
-            <span style="display:inline-block; padding:4px 10px; border-radius:6px; font-family:SFMono-Regular,Menlo,Monaco,Consolas,monospace; font-size:10px; font-weight:800; background:{status_badge_bg}; color:{status_badge_text}; border:1px solid {status_badge_border};">
-              {status_badge_label}
-            </span>
-          </td>
-        </tr>
-      </table>
-    </div>
+    <!-- EXECUTIVE BRAND & ORIGIN CARD (LIGHT THEME + FULL NEON MONOGRAM) -->
+    <tr>
+      <td style="padding: 0 0 16px 0;">
+        <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background:#ffffff; border:1px solid #e2e8f0; border-radius:16px; padding:24px; box-shadow:0 1px 4px rgba(0,0,0,0.05);">
+          <tr>
+            <td class="header-logo-td" width="56" valign="middle" style="padding-right:16px;">
+              <!-- Full Neon FZ Monogram in Sleek Dark Pill -->
+              <div style="background:#090d16; border:1px solid rgba(137,255,0,0.5); border-radius:12px; padding:10px; text-align:center; box-shadow:0 0 20px rgba(137,255,0,0.25);">
+                <svg viewBox="0 0 171.63 91" width="46" height="24" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:block; margin:0 auto;">
+                  <path d="M43.82,70.3l64.52.05,5.42-12.76-32.78-.36,41.09-19.08,7.56-18.43,27.69.85-25.84,61.15c-2.63,6.23-11.43,8.64-18.18,8.65l-111.12.13,41.64-20.2Z" fill="#89ff00" />
+                  <path d="M129.63,19.71l-65.22.74-5.49,12.65,32.87.55-41.14,19.05-6.83,17.6-28.38-.02L41.22,9.13C43.67,3.32,52.08.55,58.48.55l110.96-.05-39.82,19.21Z" fill="#89ff00" />
+                  <polygon points="44.55 69.8 51.04 53.07 93.98 33.19 59.67 32.61 64.74 20.95 128.88 20.22 121.68 37.77 78.77 57.7 113 58.08 108.01 69.85 44.55 69.8" fill="#0f172a" />
+                  <path d="M128.13,20.73l-6.84,16.67-40.73,18.92-4,1.86,4.41.05,31.28.34-4.57,10.78-62.4-.05,6.16-15.86,40.77-18.88,3.96-1.83-4.36-.07-31.37-.53,4.64-10.68,63.06-.71M129.63,19.71l-65.22.74-5.49,12.65,32.87.55-41.14,19.05-6.83,17.6,64.52.05,5.42-12.76-32.78-.36,41.09-19.08,7.56-18.43h0Z" fill="#ffffff" />
+                </svg>
+              </div>
+            </td>
+            <td class="header-text-td" valign="middle">
+              <div style="font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace; font-size:11px; font-weight:800; color:#059669; letter-spacing:0.18em; text-transform:uppercase; margin-bottom:4px;">
+                MOHAMMAD FAIZAL // SYSTEM TELEMETRY
+              </div>
+              <h1 style="color:#0f172a; font-size:20px; font-weight:800; margin:0 0 6px 0; letter-spacing:-0.02em; line-height:1.2;">
+                24h System Health &amp; Supervision Report
+              </h1>
+              <div style="font-size:11px; font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace; color:#64748b; line-height:1.5;">
+                <span style="color:#0284c7; font-weight:700;">Reporting Node:</span> macos <span style="display:inline-block; padding:1px 5px; border-radius:4px; font-size:10px; font-weight:700; background:#f1f5f9; color:#0f172a; border:1px solid #cbd5e1; vertical-align:middle;">PRIMARY</span> &bull; <span style="color:#334155; font-weight:600;">{}</span> &bull; <span style="color:#64748b;">Uptime: {}</span>
+              </div>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
 
-    <!-- ANOMALIES IF PRESENT -->
-    {anomalies_banner}
-
-    <!-- 24-HOUR RESOURCE UTILIZATION (AVERAGES) -->
-    <div class="section">
-      <div style="font-family:SFMono-Regular,Menlo,Monaco,Consolas,monospace; font-size:11px; font-weight:700; color:#0f172a; text-transform:uppercase; letter-spacing:0.05em; margin-bottom:12px;">
-        24h Resource Utilization (Averages)
-      </div>
-
-      <table border="0" cellpadding="0" cellspacing="0" width="100%">
-        <tr>
-          <td class="metric-cell" width="32%" valign="top">
-            <div class="metric-card">
-              <div style="font-size:10px; font-family:SFMono-Regular,Menlo,Monaco,Consolas,monospace; color:#64748b; text-transform:uppercase;">CPU (24h Avg)</div>
-              <div style="font-size:22px; font-weight:800; font-family:SFMono-Regular,Menlo,Monaco,Consolas,monospace; color:#0f172a; margin:4px 0 2px 0;">
-                {avg_cpu:.1}%
-              </div>
-              <div style="font-size:10px; font-family:SFMono-Regular,Menlo,Monaco,Consolas,monospace; color:#64748b;">
-                Peak: <strong style="color:#0f172a;">{peak_cpu:.1}%</strong> &bull; {cores} vCPUs
-              </div>
-            </div>
-          </td>
-          <td class="hide-mobile" width="2%"></td>
-          <td class="metric-cell" width="32%" valign="top">
-            <div class="metric-card">
-              <div style="font-size:10px; font-family:SFMono-Regular,Menlo,Monaco,Consolas,monospace; color:#64748b; text-transform:uppercase;">RAM (24h Avg)</div>
-              <div style="font-size:22px; font-weight:800; font-family:SFMono-Regular,Menlo,Monaco,Consolas,monospace; color:#0f172a; margin:4px 0 2px 0;">
-                {avg_ram_pct:.1}%
-              </div>
-              <div style="font-size:10px; font-family:SFMono-Regular,Menlo,Monaco,Consolas,monospace; color:#64748b;">
-                {used_ram_fmt} / {total_ram_fmt} &bull; Peak {peak_ram_pct:.1}%
-              </div>
-            </div>
-          </td>
-          <td class="hide-mobile" width="2%"></td>
-          <td class="metric-cell" width="32%" valign="top">
-            <div class="metric-card">
-              <div style="font-size:10px; font-family:SFMono-Regular,Menlo,Monaco,Consolas,monospace; color:#64748b; text-transform:uppercase;">Disk (/)</div>
-              <div style="font-size:22px; font-weight:800; font-family:SFMono-Regular,Menlo,Monaco,Consolas,monospace; color:#0f172a; margin:4px 0 2px 0;">
-                {avg_disk_pct:.1}%
-              </div>
-              <div style="font-size:10px; font-family:SFMono-Regular,Menlo,Monaco,Consolas,monospace; color:{delta_color};">
-                &Delta; {delta_sign}{disk_delta:.1} GB / 24h
-              </div>
-            </div>
-          </td>
-        </tr>
-      </table>
-
-      <!-- 24h Hourly Histogram Bar Graph -->
-      <div style="margin-top:16px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:6px; padding:12px;">
+    <!-- REAL-TOUCH QUICK-ACTION TOUCH BAR -->
+    <tr>
+      <td style="padding: 0 0 16px 0;">
         <table border="0" cellpadding="0" cellspacing="0" width="100%">
           <tr>
-            <td style="font-family:SFMono-Regular,Menlo,Monaco,Consolas,monospace; font-size:10px; font-weight:700; color:#475569; text-transform:uppercase;">
-              24h Hourly CPU Trend &amp; Spike Distribution
+            <td class="action-bar-btn" width="32%" style="padding-right:6px;">
+              <a href="https://faizal.uk/admin.html" class="touch-btn" style="display:block; background:#0f172a; color:#89ff00; border:1px solid #0f172a; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; text-align:center; text-decoration:none; box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+                ⚡ CLUSTER ADMIN
+              </a>
             </td>
-            <td align="right" style="font-family:SFMono-Regular,Menlo,Monaco,Consolas,monospace; font-size:10px; color:#64748b;">
-              Hover/tap bars for hourly load
+            <td class="action-bar-btn" width="32%" style="padding-right:6px; padding-left:6px;">
+              <a href="https://faizal.uk" class="touch-btn" style="display:block; background:#ffffff; color:#0284c7; border:1px solid #cbd5e1; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; text-align:center; text-decoration:none; box-shadow:0 1px 2px rgba(0,0,0,0.05);">
+                🌐 LIVE PORTFOLIO
+              </a>
+            </td>
+            <td class="action-bar-btn" width="32%" style="padding-left:6px;">
+              <a href="https://faizal.uk/api/system-stats" class="touch-btn" style="display:block; background:#ffffff; color:#334155; border:1px solid #cbd5e1; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; text-align:center; text-decoration:none; box-shadow:0 1px 2px rgba(0,0,0,0.05);">
+                🩺 TELEMETRY API
+              </a>
             </td>
           </tr>
         </table>
-        
-        <table border="0" cellpadding="0" cellspacing="0" width="100%" style="height:52px; margin-top:8px;">
-          <tr>
-            {sparkline_bars}
-          </tr>
-        </table>
+      </td>
+    </tr>
 
-        <div style="border-top:1px solid #e2e8f0; margin-top:6px; padding-top:4px;">
-          <table border="0" cellpadding="0" cellspacing="0" width="100%" style="font-family:SFMono-Regular,Menlo,Monaco,Consolas,monospace; font-size:9px; color:#94a3b8;">
-            <tr>
-              <td>-24h</td>
-              <td align="center">-12h</td>
-              <td align="right">Current</td>
-            </tr>
-          </table>
+    <!-- HERO STATUS BANNER -->
+    <tr>
+      <td style="padding: 0 0 16px 0;">
+        {}
+      </td>
+    </tr>
+
+    <!-- NODE 01: macos [PRIMARY] (24H AVERAGE METRICS & HOURLY HISTOGRAM) -->
+    <tr>
+      <td style="padding: 0 0 16px 0;">
+        <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background:#ffffff; border:1px solid #e2e8f0; border-radius:16px; padding:20px; box-shadow:0 1px 3px rgba(0,0,0,0.04);">
+          <tr>
+            <td>
+              <table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-bottom:14px;">
+                <tr>
+                  <td valign="top">
+                    <div style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:10px; font-weight:800; color:#059669; letter-spacing:0.12em; text-transform:uppercase;">
+                      PRIMARY CORE &bull; 24H AVERAGE METRICS
+                    </div>
+                    <div style="color:#0f172a; font-size:16px; font-weight:700; margin-top:2px;">
+                      macos <span style="display:inline-block; padding:2px 6px; border-radius:4px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:10px; font-weight:700; background:#f1f5f9; color:#0f172a; border:1px solid #cbd5e1; vertical-align:middle; margin-left:4px;">PRIMARY</span>
+                    </div>
+                    <div style="font-size:11px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; color:#64748b; margin-top:2px;">
+                      Platform: {} &bull; Uptime: {} &bull; Load Avg: {}, {}, {}
+                    </div>
+                  </td>
+                  <td align="right" valign="top">
+                    <span style="display:inline-block; padding:4px 9px; border-radius:6px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:10px; font-weight:800; background:#ecfdf5; color:#047857; border:1px solid #a7f3d0; text-transform:uppercase;">
+                      ● PRIMARY // ACTIVE
+                    </span>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- 3 Metric Tiles (24h Averages) -->
+              <table class="metric-row" border="0" cellpadding="0" cellspacing="0" width="100%">
+                <tr>
+                  <td class="metric-tile" width="32%" valign="top" style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:12px;">
+                    <div style="font-size:10px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; color:#64748b; text-transform:uppercase; letter-spacing:0.06em; font-weight:700;">24H AVG CPU</div>
+                    <div style="font-size:22px; font-weight:800; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; color:#0f172a; margin:3px 0;">{:.1}%</div>
+                    <div style="font-size:10px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; color:#64748b;">Peak: {:.1}% &bull; Min: {:.1}% &bull; {} Cores</div>
+                    <div style="height:5px; background:#e2e8f0; border-radius:2px; margin-top:8px; overflow:hidden;">
+                      <div style="height:100%; width:{:.0}%; background:{}; border-radius:2px;"></div>
+                    </div>
+                  </td>
+                  <td class="hide-mobile" width="2%"></td>
+                  <td class="metric-tile" width="32%" valign="top" style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:12px;">
+                    <div style="font-size:10px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; color:#64748b; text-transform:uppercase; letter-spacing:0.06em; font-weight:700;">24H AVG RAM</div>
+                    <div style="font-size:22px; font-weight:800; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; color:#0f172a; margin:3px 0;">{:.1}%</div>
+                    <div style="font-size:10px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; color:#64748b;">{} / {} &bull; Peak: {:.1}%</div>
+                    <div style="height:5px; background:#e2e8f0; border-radius:2px; margin-top:8px; overflow:hidden;">
+                      <div style="height:100%; width:{:.0}%; background:{}; border-radius:2px;"></div>
+                    </div>
+                  </td>
+                  <td class="hide-mobile" width="2%"></td>
+                  <td class="metric-tile" width="32%" valign="top" style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:12px;">
+                    <div style="font-size:10px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; color:#64748b; text-transform:uppercase; letter-spacing:0.06em; font-weight:700;">DISK (/)</div>
+                    <div style="font-size:22px; font-weight:800; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; color:#0f172a; margin:3px 0;">{:.1}%</div>
+                    <div style="font-size:10px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; color:{};">&Delta; {}{:.1} GB / 24h</div>
+                    <div style="height:5px; background:#e2e8f0; border-radius:2px; margin-top:8px; overflow:hidden;">
+                      <div style="height:100%; width:{:.0}%; background:{}; border-radius:2px;"></div>
+                    </div>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- 24-Hour Trend & Spike Graph -->
+              <div style="margin-top:14px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:12px;">
+                <table border="0" cellpadding="0" cellspacing="0" width="100%">
+                  <tr>
+                    <td style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:10px; font-weight:700; color:#475569; text-transform:uppercase; letter-spacing:0.05em;">
+                      24h Hourly Activity &amp; Spike Trend
+                    </td>
+                    <td align="right" style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:10px; color:#64748b;">
+                      Hover bars for hourly load
+                    </td>
+                  </tr>
+                </table>
+                
+                <table border="0" cellpadding="0" cellspacing="0" width="100%" style="height:52px; margin-top:8px;">
+                  <tr>
+                    {}
+                  </tr>
+                </table>
+
+                <div style="border-top:1px solid #e2e8f0; margin-top:6px; padding-top:4px;">
+                  <table border="0" cellpadding="0" cellspacing="0" width="100%" style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:9px; color:#94a3b8;">
+                    <tr>
+                      <td>-24h</td>
+                      <td align="center">-12h</td>
+                      <td align="right">Current</td>
+                    </tr>
+                  </table>
+                </div>
+              </div>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+
+    <!-- NODE 02: container-of-souls [BACKUP] -->
+    <tr>
+      <td style="padding: 0 0 16px 0;">
+        {}
+      </td>
+    </tr>
+
+    <!-- DOCKER SUPERVISED CONTAINERS & SERVICES -->
+    <tr>
+      <td style="padding: 0 0 16px 0;">
+        <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background:#ffffff; border:1px solid #e2e8f0; border-radius:16px; padding:20px; box-shadow:0 1px 3px rgba(0,0,0,0.04);">
+          <tr>
+            <td>
+              <table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-bottom:12px;">
+                <tr>
+                  <td>
+                    <h3 style="color:#0f172a; font-size:15px; font-weight:700; margin:0 0 2px 0;">
+                      Container Runtime &amp; Supervised Services
+                    </h3>
+                    <div style="font-size:11px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; color:#64748b;">
+                      Active sibling containers &bull; Restarts: {}
+                    </div>
+                  </td>
+                  <td align="right">
+                    <span style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:11px;">
+                      {}
+                    </span>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- Containers list -->
+              <div>
+                {}
+              </div>
+
+              <!-- Services Grid -->
+              <div style="margin-top:12px; padding-top:10px; border-top:1px solid #f1f5f9;">
+                <div style="font-size:10px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; color:#64748b; text-transform:uppercase; letter-spacing:0.06em; font-weight:700; margin-bottom:6px;">SUPERVISED NETWORK SERVICES</div>
+                <div>{}</div>
+              </div>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+
+    <!-- 24H AUDIENCE & TRAFFIC TELEMETRY -->
+    <tr>
+      <td style="padding: 0 0 16px 0;">
+        <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background:#ffffff; border:1px solid #e2e8f0; border-radius:16px; padding:20px; box-shadow:0 1px 3px rgba(0,0,0,0.04);">
+          <tr>
+            <td>
+              <h3 style="color:#0f172a; font-size:15px; font-weight:700; margin:0 0 3px 0;">
+                24h Traffic &amp; Client Telemetry
+              </h3>
+              <div style="font-size:11px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; color:#64748b; margin:0 0 14px 0;">
+                HTTP status distribution &bull; 2xx: {:.1}% &bull; 4xx: {:.1}% &bull; 5xx: {}
+              </div>
+
+              <table class="metric-row" border="0" cellpadding="0" cellspacing="0" width="100%">
+                <tr>
+                  <td class="metric-tile" width="32%" valign="top" style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:12px;">
+                    <div style="font-size:10px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; color:#64748b; text-transform:uppercase; letter-spacing:0.06em; font-weight:700;">PAGE VIEWS</div>
+                    <div style="font-size:24px; font-weight:800; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; color:#059669; margin:3px 0;">{}</div>
+                    <div style="font-size:10px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; color:#64748b;">Recorded visits</div>
+                  </td>
+                  <td class="hide-mobile" width="2%"></td>
+                  <td class="metric-tile" width="32%" valign="top" style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:12px;">
+                    <div style="font-size:10px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; color:#64748b; text-transform:uppercase; letter-spacing:0.06em; font-weight:700;">UNIQUE VISITORS</div>
+                    <div style="font-size:24px; font-weight:800; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; color:#0284c7; margin:3px 0;">{}</div>
+                    <div style="font-size:10px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; color:#64748b;">Distinct client IPs</div>
+                  </td>
+                  <td class="hide-mobile" width="2%"></td>
+                  <td class="metric-tile" width="32%" valign="top" style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:12px;">
+                    <div style="font-size:10px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; color:#64748b; text-transform:uppercase; letter-spacing:0.06em; font-weight:700;">CLIENT MESSAGES</div>
+                    <div style="font-size:24px; font-weight:800; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; color:#7c3aed; margin:3px 0;">{}</div>
+                    <div style="font-size:10px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; color:#64748b;">Inbound inquiries</div>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+
+    <!-- EXPANDABLE REAL-TOUCH DIAGNOSTIC LOGS -->
+    {}
+
+    <!-- FOOTER -->
+    <tr>
+      <td style="padding: 16px 8px 30px 8px; text-align: center;">
+        <div style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:11px; font-weight:700; color:#64748b; letter-spacing:0.08em; text-transform:uppercase;">
+          MOHAMMAD FAIZAL &bull; CLUSTER TELEMETRY &bull; PURE RUST AXUM ENGINE
         </div>
-      </div>
-    </div>
+        <div style="font-size:10px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; color:#94a3b8; margin-top:4px;">
+          Generated: {} &bull; Single-Source Rust Health Daemon &bull; Automated 24h Cron
+        </div>
+      </td>
+    </tr>
 
-    <!-- CLUSTER NODES -->
-    <div class="section">
-      <div style="font-family:SFMono-Regular,Menlo,Monaco,Consolas,monospace; font-size:11px; font-weight:700; color:#0f172a; text-transform:uppercase; letter-spacing:0.05em; margin-bottom:12px;">
-        Cluster Nodes
-      </div>
-
-      <div style="margin-bottom:12px; padding:10px 12px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:6px;">
-        <table border="0" cellpadding="0" cellspacing="0" width="100%">
-          <tr>
-            <td>
-              <span style="font-family:SFMono-Regular,Menlo,Monaco,Consolas,monospace; font-size:13px; font-weight:700; color:#0f172a;">
-                {n1_name}
-              </span>
-              {n1_badge}
-              <div style="font-size:11px; font-family:SFMono-Regular,Menlo,Monaco,Consolas,monospace; color:#64748b; margin-top:3px;">
-                IP: {n1_ip} &bull; Uptime: {uptime} &bull; Load Avg: {l1}, {l5}, {l15}
-              </div>
-            </td>
-            <td align="right" valign="top">
-              <span style="font-family:SFMono-Regular,Menlo,Monaco,Consolas,monospace; font-size:11px; font-weight:700; color:#15803d; background:#ecfdf5; border:1px solid #bbf7d0; padding:2px 8px; border-radius:4px;">
-                ONLINE
-              </span>
-            </td>
-          </tr>
-        </table>
-      </div>
-
-      <div style="padding:10px 12px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:6px;">
-        <table border="0" cellpadding="0" cellspacing="0" width="100%">
-          <tr>
-            <td>
-              <span style="font-family:SFMono-Regular,Menlo,Monaco,Consolas,monospace; font-size:13px; font-weight:700; color:#0f172a;">
-                container-of-souls
-              </span>
-              <span style="display:inline-block; padding:2px 6px; border-radius:4px; font-family:SFMono-Regular,Menlo,Monaco,Consolas,monospace; font-size:10px; font-weight:700; background:#f1f5f9; color:#475569; border:1px solid #cbd5e1; vertical-align:middle; margin-left:6px;">BACKUP</span>
-              <div style="font-size:11px; font-family:SFMono-Regular,Menlo,Monaco,Consolas,monospace; color:#64748b; margin-top:3px;">
-                IP: 10.0.0.195 &bull; {n2_details_html}
-              </div>
-            </td>
-            <td align="right" valign="top">
-              {n2_status_pill}
-            </td>
-          </tr>
-        </table>
-      </div>
-    </div>
-
-    <!-- CONTAINER WORKLOADS (DOCKER) -->
-    <div class="section">
-      <table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-bottom:8px;">
-        <tr>
-          <td>
-            <div style="font-family:SFMono-Regular,Menlo,Monaco,Consolas,monospace; font-size:11px; font-weight:700; color:#0f172a; text-transform:uppercase; letter-spacing:0.05em;">
-              Container Workloads (Docker)
-            </div>
-          </td>
-          <td align="right" style="font-family:SFMono-Regular,Menlo,Monaco,Consolas,monospace; font-size:11px; color:#64748b;">
-            {running_containers} Running &bull; {stopped_containers} Stopped &bull; {total_restarts} Restarts (24h)
-          </td>
-        </tr>
-      </table>
-
-      <table border="0" cellpadding="0" cellspacing="0" width="100%">
-        {docker_rows}
-      </table>
-    </div>
-
-    <!-- NETWORK SERVICES -->
-    <div class="section">
-      <div style="font-family:SFMono-Regular,Menlo,Monaco,Consolas,monospace; font-size:11px; font-weight:700; color:#0f172a; text-transform:uppercase; letter-spacing:0.05em; margin-bottom:8px;">
-        Network Services &amp; TCP Socket Probes
-      </div>
-      <div>
-        {service_items}
-      </div>
-    </div>
-
-    <!-- SECURITY, AUDIT & HTTP TRAFFIC -->
-    <div class="section">
-      <div style="font-family:SFMono-Regular,Menlo,Monaco,Consolas,monospace; font-size:11px; font-weight:700; color:#0f172a; text-transform:uppercase; letter-spacing:0.05em; margin-bottom:12px;">
-        Security, Audit &amp; Traffic (24h)
-      </div>
-
-      <table border="0" cellpadding="0" cellspacing="0" width="100%">
-        <tr>
-          <td class="metric-cell" width="32%" valign="top">
-            <div class="metric-card">
-              <div style="font-size:10px; font-family:SFMono-Regular,Menlo,Monaco,Consolas,monospace; color:#64748b; text-transform:uppercase;">SSH Security</div>
-              <div style="font-size:18px; font-weight:800; font-family:SFMono-Regular,Menlo,Monaco,Consolas,monospace; color:#0f172a; margin:3px 0;">
-                {ssh_failures}
-              </div>
-              <div style="font-size:10px; font-family:SFMono-Regular,Menlo,Monaco,Consolas,monospace; color:#64748b;">Failed attempts blocked</div>
-            </div>
-          </td>
-          <td class="hide-mobile" width="2%"></td>
-          <td class="metric-cell" width="32%" valign="top">
-            <div class="metric-card">
-              <div style="font-size:10px; font-family:SFMono-Regular,Menlo,Monaco,Consolas,monospace; color:#64748b; text-transform:uppercase;">HTTP Health (24h)</div>
-              <div style="font-size:18px; font-weight:800; font-family:SFMono-Regular,Menlo,Monaco,Consolas,monospace; color:#15803d; margin:3px 0;">
-                {http_2xx_pct:.1}% 2xx
-              </div>
-              <div style="font-size:10px; font-family:SFMono-Regular,Menlo,Monaco,Consolas,monospace; color:#64748b;">
-                4xx: {http_4xx_pct:.1}% &bull; 5xx: {http_5xx_cnt}
-              </div>
-            </div>
-          </td>
-          <td class="hide-mobile" width="2%"></td>
-          <td class="metric-cell" width="32%" valign="top">
-            <div class="metric-card">
-              <div style="font-size:10px; font-family:SFMono-Regular,Menlo,Monaco,Consolas,monospace; color:#64748b; text-transform:uppercase;">Audience Activity</div>
-              <div style="font-size:18px; font-weight:800; font-family:SFMono-Regular,Menlo,Monaco,Consolas,monospace; color:#0f172a; margin:3px 0;">
-                {views} Views
-              </div>
-              <div style="font-size:10px; font-family:SFMono-Regular,Menlo,Monaco,Consolas,monospace; color:#64748b;">
-                {unique_visitors} unique &bull; {messages} msgs
-              </div>
-            </div>
-          </td>
-        </tr>
-      </table>
-
-      {diagnostic_section}
-    </div>
-
-    <!-- QUICK ACTIONS & FOOTER -->
-    <div style="padding:16px 24px; background:#f8fafc;">
-      <table border="0" cellpadding="0" cellspacing="0" width="100%">
-        <tr>
-          <td>
-            <a href="https://faizal.uk/admin.html" class="btn" style="background:#0f172a; color:#ffffff; margin-right:8px;">
-              Cluster Admin &rarr;
-            </a>
-            <a href="https://faizal.uk/api/system-stats" class="btn" style="background:#ffffff; color:#334155; border:1px solid #cbd5e1;">
-              Raw Telemetry API
-            </a>
-          </td>
-          <td align="right" style="font-family:SFMono-Regular,Menlo,Monaco,Consolas,monospace; font-size:10px; color:#94a3b8;">
-            Single-Source Rust Daemon
-          </td>
-        </tr>
-      </table>
-    </div>
-
-  </div>
+  </table>
 </td>
 </tr>
 </table>
 </body>
 </html>"##,
-        gen_time = gen_time,
-        status_badge_bg = status_badge_bg,
-        status_badge_text = status_badge_text,
-        status_badge_border = status_badge_border,
-        status_badge_label = status_badge_label,
-        anomalies_banner = anomalies_banner,
-        avg_cpu = avg_cpu,
-        peak_cpu = peak_cpu,
-        cores = data.cpu.cores,
-        avg_ram_pct = avg_ram_pct,
-        used_ram_fmt = format_bytes(avg_ram_bytes),
-        total_ram_fmt = format_bytes(total_ram_bytes),
-        peak_ram_pct = peak_ram_pct,
-        avg_disk_pct = avg_disk_pct,
-        delta_color = delta_color,
-        delta_sign = delta_sign,
-        disk_delta = disk_delta,
-        sparkline_bars = sparkline_bars,
-        n1_name = n1_name,
-        n1_badge = n1_badge,
-        n1_ip = n1_ip,
-        uptime = data.uptime_formatted,
-        l1 = data.cpu.load_avg_1m,
-        l5 = data.cpu.load_avg_5m,
-        l15 = data.cpu.load_avg_15m,
-        n2_details_html = n2_details_html,
-        n2_status_pill = n2_status_pill,
-        running_containers = data.docker_summary.running,
-        stopped_containers = data.docker_summary.stopped,
-        total_restarts = total_restarts,
-        docker_rows = docker_rows,
-        service_items = service_items,
-        ssh_failures = data.errors24h.ssh_auth_failures,
-        http_2xx_pct = data.http_traffic.pct_2xx,
-        http_4xx_pct = data.http_traffic.pct_4xx,
-        http_5xx_cnt = data.http_traffic.status_5xx,
-        views = data.analytics24h.views,
-        unique_visitors = data.analytics24h.unique_visitors,
-        messages = data.analytics24h.messages_received,
-        diagnostic_section = diagnostic_section
+        data.platform, data.uptime_formatted,
+        hero_status_banner,
+        data.platform, data.uptime_formatted,
+        data.cpu.load_avg_1m, data.cpu.load_avg_5m, data.cpu.load_avg_15m,
+        avg_cpu, peak_cpu, min_cpu, data.cpu.cores, avg_cpu, n1_cpu_bar,
+        avg_ram_pct, format_bytes(avg_ram_bytes), format_bytes(total_ram_bytes), peak_ram_pct, avg_ram_pct, n1_mem_bar,
+        avg_disk_pct, delta_color, delta_sign, disk_delta, avg_disk_pct, n1_disk_bar,
+        sparkline_bars,
+        node_02_card,
+        total_restarts, docker_summary_text,
+        docker_containers_html,
+        services_grid_html,
+        data.http_traffic.pct_2xx, data.http_traffic.pct_4xx, data.http_traffic.status_5xx,
+        data.analytics24h.views, data.analytics24h.unique_visitors, data.analytics24h.messages_received,
+        diagnostic_logs_section,
+        gen_time
     )
 }
 
