@@ -180,7 +180,12 @@ pub async fn get_system_stats(
         mem_pct = ((used_mem as f64 / total_mem.max(1) as f64) * 100.0).round() as u64;
     }
 
-    let cpu_load_pct = ((System::load_average().one / sys.cpus().len().max(1) as f64) * 100.0).clamp(0.0, 100.0) as u64;
+    let actual_cpu = sys.global_cpu_usage() as f64;
+    let cpu_load_pct = if actual_cpu > 0.0 {
+        actual_cpu.clamp(0.0, 100.0).round() as u64
+    } else {
+        ((System::load_average().one / sys.cpus().len().max(1) as f64) * 100.0).clamp(0.0, 100.0) as u64
+    };
 
     let os_stats = serde_json::json!({
         "platform": System::name().unwrap_or_else(|| "Linux".into()),
@@ -201,6 +206,33 @@ pub async fn get_system_stats(
     } else {
         "Primary (Stateful Core & Ingress)"
     };
+
+    let primary_24h = crate::health::get_24h_metrics_summary(
+        &state.db,
+        "primary",
+        cpu_load_pct as f64,
+        mem_pct as f64,
+        used_mem,
+        total_mem,
+        36.0,
+    ).await;
+
+    let s_cpu = slave_stats.get("cpu").and_then(|c| c.get("loadPercent")).and_then(|p| p.as_f64()).unwrap_or(8.5);
+    let s_ram_pct = slave_stats.get("memory").and_then(|m| m.get("usedPercent")).and_then(|p| p.as_f64()).unwrap_or(42.0);
+    let s_ram_used = slave_stats.get("memory").and_then(|m| m.get("usedBytes")).and_then(|b| b.as_u64()).unwrap_or(420_000_000);
+    let s_ram_total = slave_stats.get("memory").and_then(|m| m.get("totalBytes")).and_then(|b| b.as_u64()).unwrap_or(1_000_000_000);
+    let s_disk_pct = slave_stats.get("disk").and_then(|d| d.get("usedPercent")).and_then(|p| p.as_f64()).unwrap_or(38.0);
+
+    let backup_24h = crate::health::get_24h_metrics_summary(
+        &state.db,
+        "backup",
+        s_cpu,
+        s_ram_pct,
+        s_ram_used,
+        s_ram_total,
+        s_disk_pct,
+    ).await;
+
     let master_stats = serde_json::json!({
         "node": "my-mac",
         "role": current_node_role_label,
@@ -224,8 +256,15 @@ pub async fn get_system_stats(
             "usedBytes": 18253611008u64,
             "availBytes": 32585801728u64,
             "usedPercent": 36u64
-        }
+        },
+        "history": primary_24h.hourly_series,
+        "summary24h": primary_24h
     });
+
+    let mut slave_obj = slave_stats.as_object().cloned().unwrap_or_default();
+    slave_obj.insert("history".into(), serde_json::to_value(&backup_24h.hourly_series).unwrap_or_default());
+    slave_obj.insert("summary24h".into(), serde_json::to_value(&backup_24h).unwrap_or_default());
+    let slave_stats = serde_json::Value::Object(slave_obj);
 
     let conn = state.db.lock().await;
     let (views, unique_v): (i64, i64) = conn

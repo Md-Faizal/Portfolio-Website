@@ -2,6 +2,7 @@ import React from 'react';
 import { motion } from 'framer-motion';
 import { Server, Cpu, HardDrive, Database, Activity, ExternalLink, ShieldCheck, Zap } from 'lucide-react';
 import MetricCard from '../components/MetricCard';
+import VmTelemetryChart from '../components/VmTelemetryChart';
 
 export default function ClusterTab({ cluster, onOpenReportPreview }) {
   const primary = cluster?.primary || cluster?.master || {};
@@ -137,6 +138,22 @@ export default function ClusterTab({ cluster, onOpenReportPreview }) {
             badgeColor="sky"
           />
         </div>
+
+        {/* Detailed 24h Telemetry Chart for Node 01 */}
+        <VmTelemetryChart
+          nodeName="my-mac"
+          roleLabel="Primary Stateful Core & Web Ingress"
+          theme="neon"
+          currentCpu={primaryCpu}
+          currentRam={primaryMemUsed}
+          currentDisk={primaryDiskUsed}
+          ramUsedFormatted={formatBytes(primary.memory?.usedBytes)}
+          ramTotalFormatted={formatBytes(primary.memory?.totalBytes)}
+          diskUsedFormatted={formatBytes(primary.disk?.usedBytes)}
+          diskTotalFormatted={formatBytes(primary.disk?.totalBytes)}
+          history={primary.history}
+          summary={primary.summary24h}
+        />
       </section>
 
       {/* NODE 2: BACKUP */}
@@ -203,6 +220,22 @@ export default function ClusterTab({ cluster, onOpenReportPreview }) {
             badgeColor="sky"
           />
         </div>
+
+        {/* Detailed 24h Telemetry Chart for Node 02 */}
+        <VmTelemetryChart
+          nodeName="container-of-souls"
+          roleLabel="Dedicated Compute Worker, Bloomberg & Game Engines"
+          theme="sky"
+          currentCpu={backupCpu}
+          currentRam={backupMemUsed}
+          currentDisk={backupDiskUsed}
+          ramUsedFormatted={formatBytes(backup.memory?.usedBytes)}
+          ramTotalFormatted={formatBytes(backup.memory?.totalBytes)}
+          diskUsedFormatted={formatBytes(backup.disk?.usedBytes)}
+          diskTotalFormatted={formatBytes(backup.disk?.totalBytes)}
+          history={backup.history}
+          summary={backup.summary24h}
+        />
       </section>
     </div>
   );
