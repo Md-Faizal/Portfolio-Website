@@ -5,9 +5,11 @@
 # =============================================================================
 FROM ubuntu:24.04 AS runtime
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates tzdata curl wget \
-    && rm -rf /var/lib/apt/lists/*
+RUN for i in 1 2 3 4 5; do \
+        echo "nameserver 8.8.8.8" > /etc/resolv.conf 2>/dev/null || true; \
+        apt-get update && apt-get install -y --no-install-recommends \
+        ca-certificates tzdata curl wget && break || sleep 5; \
+    done && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
