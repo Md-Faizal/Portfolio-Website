@@ -220,7 +220,7 @@ jobs:
 
           # Step 2: Sync files via rsync
           echo "📦 Step 2: Syncing binary, configs, and web assets via rsync..."
-          rsync -avz personal-site-rust Dockerfile docker-compose.yml ca-certificates.crt production:"$TARGET_DIR/"
+          rsync -avz personal-site-rust Dockerfile docker-compose.yml ca-certificates.crt scripts production:"$TARGET_DIR/"
           rsync -avz --delete frontend/dist/ production:"$TARGET_DIR/frontend/dist/"
           rsync -avz --delete public/ production:"$TARGET_DIR/public/"
 
@@ -288,6 +288,12 @@ jobs:
             sleep 4
             curl -sS http://127.0.0.1:3002/api/maintenance-status || exit 1
             echo "✅ Standby personal-site-rust container on cos is healthy and ready!"
+
+            # Reload COS telemetry agent with accurate /proc/stat CPU metrics
+            chmod -R a+rx "$TARGET_DIR/scripts" 2>/dev/null || true
+            if [ -f "$TARGET_DIR/scripts/cos_agent.py" ]; then
+              sudo systemctl restart cos-agent.service 2>/dev/null || sudo systemctl restart cos-slave.service 2>/dev/null || (pkill -f cos_agent.py 2>/dev/null; nohup python3 "$TARGET_DIR/scripts/cos_agent.py" > /dev/null 2>&1 &) || true
+            fi
           COS_DEPLOY
           else
             echo "⚠️ Standby key /home/ubuntu/.ssh/cockpit-container-of-souls not found; skipping standby sync."

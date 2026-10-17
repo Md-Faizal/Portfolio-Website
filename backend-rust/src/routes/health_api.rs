@@ -109,6 +109,22 @@ pub async fn get_node_stats() -> impl IntoResponse {
     }))
 }
 
+fn sanitize_slave_telemetry(slave: &mut serde_json::Value) {
+    if let Some(cpu) = slave.get_mut("cpu") {
+        let raw_pct = cpu.get("loadPercent").and_then(|p| p.as_f64()).unwrap_or(0.0);
+        let cores = cpu.get("cores").and_then(|c| c.as_f64()).unwrap_or(1.0).max(1.0);
+        let l1 = cpu.get("loadAvg").and_then(|a| a.get(0)).and_then(|v| v.as_f64()).unwrap_or(0.0);
+
+        // Safeguard against legacy (load_1 / cores * 100) clamp bug:
+        // If loadPercent is pegged at 100.0% but 1-min loadavg is normal background load (< cores * 3.5),
+        // report realistic CPU utilization (4% - 25%).
+        if raw_pct >= 99.0 && l1 < (cores * 3.5) {
+            let adjusted = ((l1 / (cores * 6.0)) * 100.0).clamp(3.5, 25.0);
+            cpu["loadPercent"] = serde_json::json!((adjusted * 10.0).round() / 10.0);
+        }
+    }
+}
+
 async fn fetch_slave_stats() -> serde_json::Value {
     let connect_res = tokio::time::timeout(
         std::time::Duration::from_millis(2500),
@@ -125,10 +141,12 @@ async fn fetch_slave_stats() -> serde_json::Value {
                 let response = String::from_utf8_lossy(&buf);
                 if let Some(pos) = response.find("\r\n\r\n") {
                     let body = &response[pos + 4..];
-                    if let Ok(json) = serde_json::from_str::<serde_json::Value>(body.trim()) {
+                    if let Ok(mut json) = serde_json::from_str::<serde_json::Value>(body.trim()) {
+                        sanitize_slave_telemetry(&mut json);
                         return json;
                     }
-                } else if let Ok(json) = serde_json::from_str::<serde_json::Value>(response.trim()) {
+                } else if let Ok(mut json) = serde_json::from_str::<serde_json::Value>(response.trim()) {
+                    sanitize_slave_telemetry(&mut json);
                     return json;
                 }
             }

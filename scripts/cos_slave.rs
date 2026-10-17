@@ -12,6 +12,59 @@ fn get_uptime() -> u64 {
         .unwrap_or(0)
 }
 
+use std::sync::atomic::{AtomicU64, Ordering};
+
+static LAST_TOTAL_JIFFIES: AtomicU64 = AtomicU64::new(0);
+static LAST_IDLE_JIFFIES: AtomicU64 = AtomicU64::new(0);
+
+fn read_proc_stat_jiffies() -> Option<(u64, u64)> {
+    let stat = fs::read_to_string("/proc/stat").ok()?;
+    let first_line = stat.lines().next()?;
+    if !first_line.starts_with("cpu ") {
+        return None;
+    }
+    let parts: Vec<u64> = first_line
+        .split_whitespace()
+        .skip(1)
+        .filter_map(|s| s.parse::<u64>().ok())
+        .collect();
+    if parts.len() < 5 {
+        return None;
+    }
+    let idle = parts[3] + parts.get(4).copied().unwrap_or(0);
+    let total: u64 = parts.iter().sum();
+    Some((total, idle))
+}
+
+fn get_cpu_utilization() -> f64 {
+    if let Some((total, idle)) = read_proc_stat_jiffies() {
+        let prev_total = LAST_TOTAL_JIFFIES.swap(total, Ordering::Relaxed);
+        let prev_idle = LAST_IDLE_JIFFIES.swap(idle, Ordering::Relaxed);
+
+        if prev_total > 0 && total > prev_total {
+            let total_diff = total - prev_total;
+            let idle_diff = idle.saturating_sub(prev_idle);
+            if total_diff > 0 {
+                let active = total_diff.saturating_sub(idle_diff);
+                return ((active as f64 / total_diff as f64) * 100.0).clamp(0.0, 100.0);
+            }
+        } else {
+            std::thread::sleep(std::time::Duration::from_millis(80));
+            if let Some((total2, idle2)) = read_proc_stat_jiffies() {
+                LAST_TOTAL_JIFFIES.store(total2, Ordering::Relaxed);
+                LAST_IDLE_JIFFIES.store(idle2, Ordering::Relaxed);
+                let total_diff = total2.saturating_sub(total);
+                let idle_diff = idle2.saturating_sub(idle);
+                if total_diff > 0 {
+                    let active = total_diff.saturating_sub(idle_diff);
+                    return ((active as f64 / total_diff as f64) * 100.0).clamp(0.0, 100.0);
+                }
+            }
+        }
+    }
+    0.0
+}
+
 fn get_cpu_info() -> (usize, f64, f64, f64, f64) {
     let cores = fs::read_to_string("/proc/cpuinfo")
         .map(|s| s.lines().filter(|l| l.starts_with("processor")).count())
@@ -29,7 +82,7 @@ fn get_cpu_info() -> (usize, f64, f64, f64, f64) {
         })
         .unwrap_or((0.0, 0.0, 0.0));
 
-    let pct = ((l1 / cores as f64) * 100.0).clamp(0.0, 100.0);
+    let pct = get_cpu_utilization();
     (cores, l1, l5, l15, pct)
 }
 

@@ -8,6 +8,44 @@ import time
 
 PORT = 9100
 
+_last_cpu_time = 0.0
+_last_idle_time = 0.0
+
+def get_cpu_utilization():
+    global _last_cpu_time, _last_idle_time
+    try:
+        with open("/proc/stat") as f:
+            first_line = f.readline()
+        parts = first_line.split()[1:]
+        values = [float(x) for x in parts]
+        idle_time = values[3] + (values[4] if len(values) > 4 else 0.0)
+        total_time = sum(values)
+
+        if _last_cpu_time == 0.0 or total_time <= _last_cpu_time:
+            time.sleep(0.08)
+            with open("/proc/stat") as f:
+                second_line = f.readline()
+            parts2 = second_line.split()[1:]
+            values2 = [float(x) for x in parts2]
+            idle_time2 = values2[3] + (values2[4] if len(values2) > 4 else 0.0)
+            total_time2 = sum(values2)
+            delta_total = total_time2 - total_time
+            delta_idle = idle_time2 - idle_time
+            _last_cpu_time = total_time2
+            _last_idle_time = idle_time2
+        else:
+            delta_total = total_time - _last_cpu_time
+            delta_idle = idle_time - _last_idle_time
+            _last_cpu_time = total_time
+            _last_idle_time = idle_time
+
+        if delta_total > 0:
+            usage = ((delta_total - delta_idle) / delta_total) * 100.0
+            return max(0.0, min(100.0, round(usage, 1)))
+        return 0.0
+    except Exception:
+        return 0.0
+
 def get_cpu_info():
     try:
         with open("/proc/loadavg") as f:
@@ -16,11 +54,11 @@ def get_cpu_info():
         load_1 = float(loads[0])
         load_5 = float(loads[1])
         load_15 = float(loads[2])
-        load_pct = min(100.0, round((load_1 / cores) * 100, 1))
+        cpu_pct = get_cpu_utilization()
         return {
             "cores": cores,
             "loadAvg": [load_1, load_5, load_15],
-            "loadPercent": load_pct
+            "loadPercent": cpu_pct
         }
     except Exception as e:
         return {"cores": 1, "loadAvg": [0, 0, 0], "loadPercent": 0, "error": str(e)}

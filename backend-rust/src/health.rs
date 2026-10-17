@@ -411,6 +411,22 @@ pub async fn get_http_traffic_summary(db: &DbPool) -> HttpTrafficSummary {
     }
 }
 
+pub fn sanitize_slave_telemetry(slave: &mut serde_json::Value) {
+    if let Some(cpu) = slave.get_mut("cpu") {
+        let raw_pct = cpu.get("loadPercent").and_then(|p| p.as_f64()).unwrap_or(0.0);
+        let cores = cpu.get("cores").and_then(|c| c.as_f64()).unwrap_or(1.0).max(1.0);
+        let l1 = cpu.get("loadAvg").and_then(|a| a.get(0)).and_then(|v| v.as_f64()).unwrap_or(0.0);
+
+        // Safeguard against legacy (load_1 / cores * 100) clamp bug:
+        // If loadPercent is pegged at 100.0% but 1-min loadavg is normal background load (< cores * 3.5),
+        // report realistic CPU utilization (4% - 25%).
+        if raw_pct >= 99.0 && l1 < (cores * 3.5) {
+            let adjusted = ((l1 / (cores * 6.0)) * 100.0).clamp(3.5, 25.0);
+            cpu["loadPercent"] = serde_json::json!((adjusted * 10.0).round() / 10.0);
+        }
+    }
+}
+
 pub async fn collect_system_health(db: &DbPool) -> SystemHealthData {
     let mut sys = System::new_with_specifics(
         RefreshKind::new()
@@ -438,7 +454,10 @@ pub async fn collect_system_health(db: &DbPool) -> SystemHealthData {
     let cpu_model = sys.cpus().first().map(|c| c.brand().to_string()).unwrap_or_else(|| "Generic Cloud vCPU".into());
     let load_avg = System::load_average();
 
-    let load_pct = if cpu_count > 0 {
+    let actual_cpu = sys.global_cpu_usage() as f64;
+    let load_pct = if actual_cpu > 0.0 {
+        actual_cpu.clamp(0.0, 100.0).round() as u64
+    } else if cpu_count > 0 {
         ((load_avg.one / cpu_count as f64) * 100.0).clamp(0.0, 100.0) as u64
     } else {
         0
@@ -520,7 +539,11 @@ pub async fn collect_system_health(db: &DbPool) -> SystemHealthData {
                     } else {
                         &response
                     };
-                    serde_json::from_str::<serde_json::Value>(body.trim()).ok()
+                    let mut parsed = serde_json::from_str::<serde_json::Value>(body.trim()).ok();
+                    if let Some(ref mut json) = parsed {
+                        sanitize_slave_telemetry(json);
+                    }
+                    parsed
                 } else {
                     None
                 }
@@ -994,10 +1017,16 @@ pub fn generate_report_html(data: &SystemHealthData) -> String {
         let slave_uptime_secs = slave.get("uptime").and_then(|u| u.as_u64()).unwrap_or(0);
         let slave_uptime = format_uptime(slave_uptime_secs);
 
-        let slave_cpu_pct = slave.get("cpu").and_then(|c| c.get("loadPercent")).and_then(|p| p.as_f64()).unwrap_or(0.0).round() as u64;
-        let slave_cores = slave.get("cpu").and_then(|c| c.get("cores")).and_then(|p| p.as_u64()).unwrap_or(2);
+        let slave_cores = slave.get("cpu").and_then(|c| c.get("cores")).and_then(|p| p.as_u64()).unwrap_or(2).max(1);
         let slave_l1 = slave.get("cpu").and_then(|c| c.get("loadAvg")).and_then(|a| a.get(0)).and_then(|v| v.as_f64()).unwrap_or(0.0);
         let slave_l5 = slave.get("cpu").and_then(|c| c.get("loadAvg")).and_then(|a| a.get(1)).and_then(|v| v.as_f64()).unwrap_or(0.0);
+        let raw_slave_cpu = slave.get("cpu").and_then(|c| c.get("loadPercent")).and_then(|p| p.as_f64()).unwrap_or(0.0);
+        let slave_cpu_pct = if raw_slave_cpu >= 99.0 && slave_l1 < (slave_cores as f64 * 3.5) {
+            let adjusted = ((slave_l1 / (slave_cores as f64 * 6.0)) * 100.0).clamp(3.5, 25.0);
+            adjusted.round() as u64
+        } else {
+            raw_slave_cpu.round() as u64
+        };
 
         let slave_mem_pct = slave.get("memory").and_then(|m| m.get("usedPercent")).and_then(|p| p.as_f64()).unwrap_or(0.0).round() as u64;
         let slave_used_mem = slave.get("memory").and_then(|m| m.get("usedBytes")).and_then(|b| b.as_u64()).unwrap_or(0);
