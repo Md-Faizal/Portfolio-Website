@@ -162,8 +162,14 @@ def run():
         jobs = jobs_response.data
     except Exception as e:
         print(f"[OCI ERROR] Failed to query stack jobs: {e}")
-        state["status"] = "API_ERROR"
-        state["last_message"] = str(e)
+        err_str = str(e)
+        if "429" in err_str or "TooManyRequests" in err_str:
+            clean_msg = "OCI 429 Too Many Requests (waiting for cooldown)"
+            state["status"] = "RATE_LIMIT"
+        else:
+            clean_msg = err_str[:120]
+            state["status"] = "API_ERROR"
+        state["last_message"] = clean_msg
         save_state(state)
         sys.exit(1)
 
