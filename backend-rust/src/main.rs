@@ -73,6 +73,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/health-report/status", get(routes::health_api::get_health_status))
         .route("/health-report/config", post(routes::health_api::update_health_config))
         .route("/health-report/errors", get(routes::health_api::get_health_errors))
+        .route("/oci-allocator/send-mail", post(routes::health_api::send_oci_digest))
         .layer(from_fn_with_state(
             state.clone(),
             middleware::require_admin_middleware,

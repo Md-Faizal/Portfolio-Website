@@ -57,8 +57,25 @@ def load_state():
         "last_message": "Initialized, waiting for first check.",
         "last_job_ocid": None,
         "last_daily_email_date": None,
-        "allocated_at": None
+        "allocated_at": None,
+        "recent_attempts": []
     }
+
+def record_attempt(state, status, message, job_ocid=None):
+    if "recent_attempts" not in state or not isinstance(state["recent_attempts"], list):
+        state["recent_attempts"] = []
+    
+    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+    short_job = job_ocid[-10:] if job_ocid else "N/A"
+    
+    state["recent_attempts"].insert(0, {
+        "time": timestamp,
+        "status": status,
+        "message": message,
+        "job_id": short_job
+    })
+    # Keep up to the 10 most recent attempts
+    state["recent_attempts"] = state["recent_attempts"][:10]
 
 PUBLIC_STATE_FILE = os.environ.get("OCI_PUBLIC_STATE_FILE", "/home/ubuntu/stack/apps/personal-site/public/assets/oci_state.json")
 
@@ -209,6 +226,9 @@ def run():
             msg = getattr(latest, "lifecycle_details", "") or "Out of host capacity (or execution error)"
             state["last_message"] = msg
             print(f"[RETRY] Last job failed ({msg}). Triggering next attempt...")
+            # If the latest job hasn't been recorded in recent_attempts yet
+            if not state.get("recent_attempts") or state["recent_attempts"][0].get("job_id") != latest.id[-10:]:
+                record_attempt(state, "FAILED", msg, latest.id)
 
     # 4. Trigger New Apply Job
     try:
@@ -229,16 +249,20 @@ def run():
         state["last_attempt_at"] = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
         state["last_job_ocid"] = new_job.id
         state["status"] = "SEARCHING"
+        state["last_message"] = f"Created apply job {new_job.id[-8:]} (Waiting for result)"
+        record_attempt(state, "TRIGGERED", "Apply job created, waiting for OCI capacity evaluation", new_job.id)
         print(f"[TRIGGER] Created apply job {new_job.id[-8:]} (Attempt #{state['total_attempts']}, #{state['attempts_today']} today)")
     except Exception as e:
         print(f"[TRIGGER ERROR] Failed to create job: {e}")
         err_msg = str(e)
         if "429" in err_msg or "TooManyRequests" in err_msg:
-            state["last_message"] = "OCI 429 Too Many Requests (waiting for cooldown)"
+            clean_msg = "OCI 429 Too Many Requests (waiting for cooldown)"
         elif "Out of host capacity" in err_msg:
-            state["last_message"] = "Out of host capacity in ap-hyderabad-1"
+            clean_msg = "Out of host capacity in ap-hyderabad-1"
         else:
-            state["last_message"] = err_msg[:120]
+            clean_msg = err_msg[:120]
+        state["last_message"] = clean_msg
+        record_attempt(state, "RATE_LIMIT" if "429" in err_msg else "ERROR", clean_msg)
 
     # 5. Daily Email Check (Once per calendar day)
     if state.get("last_daily_email_date") != today:
@@ -260,7 +284,7 @@ def run():
                     <tr><td style="color: #888; padding: 6px 0;">Last Attempt:</td><td style="color: #aaa;">{state.get('last_attempt_at', 'N/A')}</td></tr>
                 </table>
                 <div style="background-color: #121418; border-left: 3px solid #f59e0b; padding: 12px; font-size: 12px; color: #c5c6c7;">
-                    The lean runner continues every 90 seconds. You will receive an immediate notification as soon as an instance is successfully provisioned.
+                    The lean runner continues every 2 minutes. You will receive an immediate notification as soon as an instance is successfully provisioned.
                 </div>
             </div>
             """
@@ -269,5 +293,32 @@ def run():
 
     save_state(state)
 
+def send_manual_digest():
+    state = load_state()
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    subject = f"⏳ [OCI Capacity] Manual Status Digest: {state['total_attempts']} attempts ({REGION})"
+    html = f"""
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #0b0c10; color: #f0f0f0; padding: 24px; border-radius: 12px; border: 1px solid #1f2833; max-width: 600px; margin: 0 auto;">
+        <div style="border-bottom: 2px solid #89ff00; padding-bottom: 12px; margin-bottom: 20px;">
+            <h2 style="color: #89ff00; margin: 0; font-size: 18px;">⚡ OCI Capacity Hunter Manual Digest</h2>
+            <p style="color: #c5c6c7; font-size: 13px; margin: 4px 0 0;">Manual report trigger for <strong>{REGION}</strong>.</p>
+        </div>
+        <table style="width: 100%; border-collapse: collapse; font-size: 13px; margin-bottom: 20px;">
+            <tr><td style="color: #888; padding: 6px 0;">Current Status:</td><td style="font-weight: bold; color: #fff;">{state.get('status', 'SEARCHING')}</td></tr>
+            <tr><td style="color: #888; padding: 6px 0;">Attempts Today:</td><td style="font-weight: bold; color: #f59e0b;">{state.get('attempts_today', 0)}</td></tr>
+            <tr><td style="color: #888; padding: 6px 0;">Total Retries:</td><td style="font-weight: bold; color: #fff;">{state.get('total_attempts', 0)}</td></tr>
+            <tr><td style="color: #888; padding: 6px 0;">Latest Output:</td><td style="color: #89ff00;">{state.get('last_message', 'Active')}</td></tr>
+            <tr><td style="color: #888; padding: 6px 0;">Last Attempt:</td><td style="color: #aaa;">{state.get('last_attempt_at', 'N/A')}</td></tr>
+        </table>
+    </div>
+    """
+    if send_email(subject, html):
+        print("[SUCCESS] Manual email sent successfully.")
+        return True
+    return False
+
 if __name__ == "__main__":
-    run()
+    if len(sys.argv) > 1 and sys.argv[1] == "--send-mail":
+        send_manual_digest()
+    else:
+        run()

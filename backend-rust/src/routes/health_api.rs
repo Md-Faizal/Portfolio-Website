@@ -500,3 +500,66 @@ pub async fn test_email(
         }
     }
 }
+
+pub async fn send_oci_digest(
+    State(state): State<SharedState>,
+) -> impl IntoResponse {
+    let script_path = "/home/ubuntu/stack/ops/scripts/oci_stack_allocator.py";
+    if std::path::Path::new(script_path).exists() {
+        let output = tokio::process::Command::new("python3")
+            .arg(script_path)
+            .arg("--send-mail")
+            .output()
+            .await;
+
+        match output {
+            Ok(out) if out.status.success() => {
+                Json(serde_json::json!({
+                    "success": true,
+                    "message": "OCI Capacity Hunter digest dispatched to configured emails."
+                }))
+            }
+            Ok(out) => {
+                let err = String::from_utf8_lossy(&out.stderr).to_string();
+                Json(serde_json::json!({
+                    "success": false,
+                    "error": if err.is_empty() { "Command failed".into() } else { err }
+                }))
+            }
+            Err(e) => {
+                Json(serde_json::json!({
+                    "success": false,
+                    "error": e.to_string()
+                }))
+            }
+        }
+    } else {
+        // Fallback: send directly via Brevo mailer using current state file
+        let state_path = "/home/ubuntu/stack/ops/oci_state.json";
+        let state_content = std::fs::read_to_string(state_path).unwrap_or_default();
+        let state_val: serde_json::Value = serde_json::from_str(&state_content).unwrap_or_default();
+
+        let recipient = "me@faizal.uk, mohammad0faizal@gmail.com";
+        let subject = format!("⚡ [OCI Capacity Hunter] Manual Digest ({})", Utc::now().format("%Y-%m-%d %H:%M UTC"));
+        let body = format!(
+            r#"<div style="font-family:sans-serif;padding:24px;background:#0b0c10;color:#f0f0f0;border-radius:12px;">
+                <h2 style="color:#89ff00;">⚡ OCI Capacity Hunter Manual Digest</h2>
+                <p>Status: <strong>{}</strong></p>
+                <p>Total Retries: <strong>{}</strong></p>
+                <p>Attempts Today: <strong>{}</strong></p>
+                <p>Latest Message: <span style="color:#f87171;">{}</span></p>
+                <p>Last Attempt: {}</p>
+            </div>"#,
+            state_val.get("status").and_then(|v| v.as_str()).unwrap_or("SEARCHING"),
+            state_val.get("total_attempts").and_then(|v| v.as_i64()).unwrap_or(0),
+            state_val.get("attempts_today").and_then(|v| v.as_i64()).unwrap_or(0),
+            state_val.get("last_message").and_then(|v| v.as_str()).unwrap_or("Active"),
+            state_val.get("last_attempt_at").and_then(|v| v.as_str()).unwrap_or("N/A")
+        );
+
+        match send_report_email(&state.config, &state.db, recipient, &subject, body).await {
+            Ok(_) => Json(serde_json::json!({ "success": true, "message": "Manual digest sent to me@faizal.uk & mohammad0faizal@gmail.com" })),
+            Err(e) => Json(serde_json::json!({ "success": false, "error": e }))
+        }
+    }
+}
