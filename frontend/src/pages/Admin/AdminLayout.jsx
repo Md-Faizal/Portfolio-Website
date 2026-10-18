@@ -104,7 +104,7 @@ export default function AdminLayout({
             </button>
 
             <a
-              href="https://faizal.uk:9090"
+              href="https://cockpit.faizal.uk"
               target="_blank"
               rel="noopener noreferrer"
               className="hidden md:flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-xs font-mono font-medium text-neutral-300 hover:text-white transition-all"

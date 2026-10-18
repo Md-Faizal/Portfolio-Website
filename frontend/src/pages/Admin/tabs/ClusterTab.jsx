@@ -71,7 +71,7 @@ export default function ClusterTab({ cluster, onOpenReportPreview }) {
             <span>24h Report</span>
           </button>
           <a
-            href="https://faizal.uk:9090"
+            href="https://cockpit.faizal.uk"
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#89ff00]/10 hover:bg-[#89ff00]/20 border border-[#89ff00]/30 text-xs font-mono font-semibold text-[#89ff00] transition-all"
