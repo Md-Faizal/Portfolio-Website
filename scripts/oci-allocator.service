@@ -1,0 +1,11 @@
+[Unit]
+Description=OCI Stack Auto-Allocator One-Shot Check
+After=network.target
+
+[Service]
+Type=oneshot
+User=ubuntu
+WorkingDirectory=/home/ubuntu/stack/ops
+ExecStart=/usr/bin/python3 /home/ubuntu/stack/ops/scripts/oci_stack_allocator.py
+StandardOutput=journal
+StandardError=journal

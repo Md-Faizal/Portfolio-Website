@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { Server, Cpu, HardDrive, Database, Activity, ExternalLink, ShieldCheck, Zap } from 'lucide-react';
 import MetricCard from '../components/MetricCard';
 import VmTelemetryChart from '../components/VmTelemetryChart';
+import OciProvisionerCard from '../components/OciProvisionerCard';
 
 export default function ClusterTab({ cluster, onOpenReportPreview }) {
   const primary = cluster?.primary || cluster?.master || {};
@@ -80,6 +81,9 @@ export default function ClusterTab({ cluster, onOpenReportPreview }) {
           </a>
         </div>
       </div>
+
+      {/* Temporary OCI Stack Capacity Hunter Telemetry */}
+      <OciProvisionerCard />
 
       {/* NODE 1: PRIMARY */}
       <section className="space-y-4">
