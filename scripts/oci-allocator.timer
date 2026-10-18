@@ -1,9 +1,9 @@
 [Unit]
-Description=OCI Stack Auto-Allocator Timer (Every 90s)
+Description=OCI Stack Auto-Allocator Timer (Every 2m)
 
 [Timer]
 OnBootSec=1min
-OnUnitActiveSec=90s
+OnUnitActiveSec=120s
 AccuracySec=10s
 
 [Install]

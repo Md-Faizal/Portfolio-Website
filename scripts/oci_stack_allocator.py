@@ -232,7 +232,13 @@ def run():
         print(f"[TRIGGER] Created apply job {new_job.id[-8:]} (Attempt #{state['total_attempts']}, #{state['attempts_today']} today)")
     except Exception as e:
         print(f"[TRIGGER ERROR] Failed to create job: {e}")
-        state["last_message"] = str(e)
+        err_msg = str(e)
+        if "429" in err_msg or "TooManyRequests" in err_msg:
+            state["last_message"] = "OCI 429 Too Many Requests (waiting for cooldown)"
+        elif "Out of host capacity" in err_msg:
+            state["last_message"] = "Out of host capacity in ap-hyderabad-1"
+        else:
+            state["last_message"] = err_msg[:120]
 
     # 5. Daily Email Check (Once per calendar day)
     if state.get("last_daily_email_date") != today:
