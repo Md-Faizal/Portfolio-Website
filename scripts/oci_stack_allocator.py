@@ -147,6 +147,19 @@ def run():
         print("[INFO] Stack already ALLOCATED. Stopping.")
         sys.exit(0)
 
+    # Rate-limit guard: Ensure at least 150s elapsed between create-job API requests
+    last_attempt_str = state.get("last_attempt_at")
+    if last_attempt_str:
+        try:
+            # Parse '2026-10-19 08:52:10 UTC'
+            last_dt = datetime.strptime(last_attempt_str.replace(" UTC", ""), "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
+            elapsed_sec = (datetime.now(timezone.utc) - last_dt).total_seconds()
+            if elapsed_sec < 150:
+                print(f"[COOLDOWN] Only {int(elapsed_sec)}s elapsed since last job attempt (min 150s). Skipping to protect rate-limit.")
+                sys.exit(0)
+        except Exception as e:
+            print(f"[WARN] Failed to parse last_attempt_at: {e}")
+
     try:
         rm = get_rm_client()
     except Exception as e:
