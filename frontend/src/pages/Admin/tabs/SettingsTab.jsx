@@ -309,7 +309,7 @@ export default function SettingsTab({
 
           <div className="flex items-center gap-2 pt-1">
             <a
-              href="https://mailadmin.faizal.uk/admin"
+              href="https://mail.faizal.uk/admin"
               target="_blank"
               rel="noopener noreferrer"
               className="flex-1 py-2.5 px-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-xs font-mono text-center text-white transition-all flex items-center justify-center gap-1.5"
