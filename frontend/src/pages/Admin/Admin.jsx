@@ -78,12 +78,12 @@ export default function Admin({ onExit }) {
     {
       id: 'cockpit',
       name: 'Cockpit Multi-Host Bridge',
-      node: 'both',
+      node: 'all',
       port: 9090,
       status: 'running',
       type: 'systemctl',
-      serving_state: 'both',
-      traffic_route: 'Multi-Host Console: my-mac & container-of-souls (:9090)',
+      serving_state: 'cluster',
+      traffic_route: 'Tri-Cluster Console: my-mac, container-of-souls & prometheus (:9090)',
       cpu_usage: '0.3% avg',
       ram_usage: '32 MB',
       storage_usage: '85 MB'

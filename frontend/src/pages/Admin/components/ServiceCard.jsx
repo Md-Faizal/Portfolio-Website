@@ -39,6 +39,7 @@ export default function ServiceCard({ service, onAction }) {
   const isActivelyServing = servingState === 'active' && isRunning;
   const isStandby = servingState === 'standby';
   const isBothCluster = servingState === 'both';
+  const isCluster = servingState === 'cluster';
 
   // Resource telemetry helper: Average CPU, RAM, and Storage
   const getResourceMetrics = () => {
@@ -192,6 +193,12 @@ export default function ServiceCard({ service, onAction }) {
                 ACTIVELY SERVING
               </span>
             )}
+            {isCluster && (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-mono font-bold bg-amber-500/15 text-amber-300 border border-amber-500/40 shadow-[0_0_10px_rgba(245,158,11,0.2)]">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+                TRI-CLUSTER ACTIVE
+              </span>
+            )}
             {isBothCluster && (
               <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-mono font-bold bg-purple-500/15 text-purple-300 border border-purple-500/40 shadow-[0_0_10px_rgba(168,85,247,0.2)]">
                 <span className="w-1.5 h-1.5 rounded-full bg-purple-400 animate-pulse" />
@@ -204,7 +211,7 @@ export default function ServiceCard({ service, onAction }) {
                 STANDBY REPLICA
               </span>
             )}
-            {!isActivelyServing && !isStandby && !isBothCluster && (
+            {!isActivelyServing && !isStandby && !isBothCluster && !isCluster && (
               <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-mono font-medium bg-white/5 text-neutral-400 border border-white/10">
                 <span className="w-1.5 h-1.5 rounded-full bg-neutral-500" />
                 OFF / IDLE
@@ -219,6 +226,8 @@ export default function ServiceCard({ service, onAction }) {
           style={{
             backgroundColor: isActivelyServing
               ? 'rgba(137, 255, 0, 0.05)'
+              : isCluster
+              ? 'rgba(245, 158, 11, 0.05)'
               : isBothCluster
               ? 'rgba(168, 85, 247, 0.05)'
               : isStandby
@@ -226,6 +235,8 @@ export default function ServiceCard({ service, onAction }) {
               : 'rgba(255, 255, 255, 0.03)',
             border: isActivelyServing
               ? '1px solid rgba(137, 255, 0, 0.18)'
+              : isCluster
+              ? '1px solid rgba(245, 158, 11, 0.22)'
               : isBothCluster
               ? '1px solid rgba(168, 85, 247, 0.18)'
               : isStandby
@@ -237,6 +248,8 @@ export default function ServiceCard({ service, onAction }) {
             className={`w-3.5 h-3.5 shrink-0 mt-0.5 ${
               isActivelyServing
                 ? 'text-[#89ff00] animate-pulse'
+                : isCluster
+                ? 'text-amber-300 animate-pulse'
                 : isBothCluster
                 ? 'text-purple-300 animate-pulse'
                 : isStandby

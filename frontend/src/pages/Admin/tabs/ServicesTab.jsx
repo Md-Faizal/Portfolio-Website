@@ -39,7 +39,7 @@ export default function ServicesTab({ services = [], onServiceAction, onRefresh,
   const isOnline = (s) => s.status === 'running' || s.status === 'online';
   const isActivelyServing = (s) => {
     const st = getServingStatus(s);
-    return (st === 'active' || st === 'both') && isOnline(s);
+    return (st === 'active' || st === 'both' || st === 'cluster') && isOnline(s);
   };
   const isStandby = (s) => getServingStatus(s) === 'standby';
   const isOff = (s) => !isOnline(s);
