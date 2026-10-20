@@ -21,9 +21,10 @@ export default function VmTelemetryChart({
   const [hoveredIndex, setHoveredIndex] = useState(null);
 
   const isNeon = theme === 'neon';
-  const primaryColor = isNeon ? '#89ff00' : '#38bdf8';
-  const secondaryColor = isNeon ? '#38bdf8' : '#a855f7';
-  const diskColor = '#f59e0b';
+  const isAmber = theme === 'amber';
+  const primaryColor = isNeon ? '#89ff00' : isAmber ? '#f59e0b' : '#38bdf8';
+  const secondaryColor = isNeon ? '#38bdf8' : isAmber ? '#fb923c' : '#a855f7';
+  const diskColor = isAmber ? '#fbbf24' : '#f59e0b';
   const peakColor = '#f43f5e';
 
   // Ensure 24 points exist

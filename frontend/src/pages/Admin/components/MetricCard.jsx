@@ -59,6 +59,8 @@ export default function MetricCard({
                     ? 'text-[#ff3366] bg-[#ff3366]/15 border-[#ff3366]/30'
                     : badgeColor === 'sky'
                     ? 'text-sky-400 bg-sky-400/15 border-sky-400/30'
+                    : badgeColor === 'amber'
+                    ? 'text-amber-400 bg-amber-400/15 border-amber-400/30'
                     : 'text-[#89ff00] bg-[#89ff00]/15 border-[#89ff00]/30'
                 }`}
               >

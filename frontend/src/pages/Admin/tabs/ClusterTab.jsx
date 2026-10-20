@@ -8,6 +8,7 @@ import OciProvisionerCard from '../components/OciProvisionerCard';
 export default function ClusterTab({ cluster, onOpenReportPreview }) {
   const primary = cluster?.primary || cluster?.master || {};
   const backup = cluster?.backup || cluster?.slave || {};
+  const gcp = cluster?.gcp || {};
 
   const formatBytes = (bytes) => {
     if (!bytes || bytes === 0) return '0 B';
@@ -33,6 +34,11 @@ export default function ClusterTab({ cluster, onOpenReportPreview }) {
   const backupCpu = backup.cpu?.loadPercent ?? 0;
   const backupMemUsed = backup.memory?.usedPercent ?? 0;
   const backupDiskUsed = backup.disk?.usedPercent ?? 0;
+
+  const gcpCpu = gcp.cpu?.loadPercent ?? 0;
+  const gcpMemUsed = gcp.memory?.usedPercent ?? 0;
+  const gcpDiskUsed = gcp.disk?.usedPercent ?? 0;
+  const gcpOnline = (gcp.status || 'offline').toLowerCase() === 'online';
 
   return (
     <div className="space-y-8" style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
@@ -239,6 +245,91 @@ export default function ClusterTab({ cluster, onOpenReportPreview }) {
           diskTotalFormatted={formatBytes(backup.disk?.totalBytes)}
           history={backup.history}
           summary={backup.summary24h}
+        />
+      </section>
+
+      {/* NODE 3: GCP PROMETHEUS */}
+      <section className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400">
+              <Server className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-base sm:text-lg font-bold text-white leading-tight">
+                  Node 03 // GCP Auxiliary // {gcp.node || 'prometheus'}
+                </h3>
+                <span className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-bold ${
+                  gcpOnline
+                    ? 'bg-amber-500/15 text-amber-400 border border-amber-500/30'
+                    : 'bg-red-500/15 text-red-400 border border-red-500/30'
+                }`}>
+                  {gcp.status?.toUpperCase() || 'OFFLINE'}
+                </span>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-mono bg-white/5 text-neutral-400 border border-white/10">
+                  {gcp.cloud || 'GCP'} &bull; {gcp.region || 'us-central1-a'}
+                </span>
+              </div>
+              <p className="text-xs font-mono text-neutral-400 mt-0.5">
+                IP: <strong className="text-white">{gcp.ip || '35.208.86.56'}</strong> &bull; OS: {gcp.os || 'Ubuntu 26.04 LTS Minimal'} &bull; Role: e2-micro Always Free &bull; Uptime: {formatUptime(gcp.uptime)}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <MetricCard
+            title="CPU Utilization"
+            value={`${gcpCpu}%`}
+            subvalue={`${gcp.cpu?.cores || 2} vCPUs Active`}
+            percent={gcpCpu}
+            icon={Cpu}
+            badge="GCP NODE"
+            badgeColor="amber"
+          />
+          <MetricCard
+            title="Memory Allocation"
+            value={formatBytes(gcp.memory?.usedBytes)}
+            subvalue={`Total: ${formatBytes(gcp.memory?.totalBytes)}`}
+            percent={gcpMemUsed}
+            icon={Activity}
+            badge={`${gcpMemUsed}%`}
+            badgeColor="amber"
+          />
+          <MetricCard
+            title="Root Storage"
+            value={formatBytes(gcp.disk?.usedBytes)}
+            subvalue={`Free: ${formatBytes(gcp.disk?.availBytes)}`}
+            percent={gcpDiskUsed}
+            icon={HardDrive}
+            badge={`${gcpDiskUsed}%`}
+            badgeColor="amber"
+          />
+          <MetricCard
+            title="Load Average"
+            value={gcp.cpu?.loadAvg ? gcp.cpu.loadAvg.slice(0, 2).join(', ') : '0.00, 0.02'}
+            subvalue="1m, 5m system load"
+            icon={Database}
+            badge="Always Free"
+            badgeColor="amber"
+          />
+        </div>
+
+        {/* Detailed 24h Telemetry Chart for Node 03 */}
+        <VmTelemetryChart
+          nodeName="prometheus"
+          roleLabel="GCP Auxiliary Node &bull; Always-Free e2-micro"
+          theme="amber"
+          currentCpu={gcpCpu}
+          currentRam={gcpMemUsed}
+          currentDisk={gcpDiskUsed}
+          ramUsedFormatted={formatBytes(gcp.memory?.usedBytes)}
+          ramTotalFormatted={formatBytes(gcp.memory?.totalBytes)}
+          diskUsedFormatted={formatBytes(gcp.disk?.usedBytes)}
+          diskTotalFormatted={formatBytes(gcp.disk?.totalBytes)}
+          history={gcp.history}
+          summary={gcp.summary24h}
         />
       </section>
     </div>

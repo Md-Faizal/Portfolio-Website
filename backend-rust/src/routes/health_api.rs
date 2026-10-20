@@ -162,6 +162,43 @@ async fn fetch_slave_stats() -> serde_json::Value {
     })
 }
 
+async fn fetch_gcp_stats() -> serde_json::Value {
+    let connect_res = tokio::time::timeout(
+        std::time::Duration::from_millis(2500),
+        tokio::net::TcpStream::connect("127.0.0.1:9101"),
+    )
+    .await;
+
+    if let Ok(Ok(mut stream)) = connect_res {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let req = "GET /stats HTTP/1.1\r\nHost: 127.0.0.1:9101\r\nUser-Agent: my-mac-cluster-probe\r\nConnection: close\r\n\r\n";
+        if stream.write_all(req.as_bytes()).await.is_ok() {
+            let mut buf = Vec::new();
+            if stream.read_to_end(&mut buf).await.is_ok() {
+                let response = String::from_utf8_lossy(&buf);
+                if let Some(pos) = response.find("\r\n\r\n") {
+                    let body = &response[pos + 4..];
+                    if let Ok(json) = serde_json::from_str::<serde_json::Value>(body.trim()) {
+                        return json;
+                    }
+                } else if let Ok(json) = serde_json::from_str::<serde_json::Value>(response.trim()) {
+                    return json;
+                }
+            }
+        }
+    }
+
+    serde_json::json!({
+        "node": "prometheus",
+        "role": "GCP Auxiliary Node (e2-micro)",
+        "ip": "35.208.86.56",
+        "cloud": "Google Cloud Platform",
+        "region": "us-central1-a",
+        "status": "offline",
+        "error": "GCP probe unreachable on 127.0.0.1:9101"
+    })
+}
+
 pub async fn get_system_stats(
     State(state): State<SharedState>,
 ) -> impl IntoResponse {
@@ -200,6 +237,7 @@ pub async fn get_system_stats(
     });
 
     let slave_stats = fetch_slave_stats().await;
+    let gcp_stats = fetch_gcp_stats().await;
     let node_role = std::env::var("NODE_ROLE").unwrap_or_else(|_| "primary".into());
     let current_node_role_label = if node_role == "standby" {
         "Standby (Compute & Ingress)"
@@ -231,6 +269,22 @@ pub async fn get_system_stats(
         s_ram_used,
         s_ram_total,
         s_disk_pct,
+    ).await;
+
+    let g_cpu = gcp_stats.get("cpu").and_then(|c| c.get("loadPercent")).and_then(|p| p.as_f64()).unwrap_or(0.0);
+    let g_ram_pct = gcp_stats.get("memory").and_then(|m| m.get("usedPercent")).and_then(|p| p.as_f64()).unwrap_or(0.0);
+    let g_ram_used = gcp_stats.get("memory").and_then(|m| m.get("usedBytes")).and_then(|b| b.as_u64()).unwrap_or(0);
+    let g_ram_total = gcp_stats.get("memory").and_then(|m| m.get("totalBytes")).and_then(|b| b.as_u64()).unwrap_or(1);
+    let g_disk_pct = gcp_stats.get("disk").and_then(|d| d.get("usedPercent")).and_then(|p| p.as_f64()).unwrap_or(0.0);
+
+    let gcp_24h = crate::health::get_24h_metrics_summary(
+        &state.db,
+        "gcp",
+        g_cpu,
+        g_ram_pct,
+        g_ram_used,
+        g_ram_total,
+        g_disk_pct,
     ).await;
 
     let master_stats = serde_json::json!({
@@ -295,6 +349,11 @@ pub async fn get_system_stats(
         })
         .unwrap_or_default();
 
+    let mut gcp_obj = gcp_stats.as_object().cloned().unwrap_or_default();
+    gcp_obj.insert("history".into(), serde_json::to_value(&gcp_24h.hourly_series).unwrap_or_default());
+    gcp_obj.insert("summary24h".into(), serde_json::to_value(&gcp_24h).unwrap_or_default());
+    let gcp_stats = serde_json::Value::Object(gcp_obj);
+
     Json(serde_json::json!({
         "success": true,
         "stats": {
@@ -302,6 +361,7 @@ pub async fn get_system_stats(
             "cluster": {
                 "primary": master_stats.clone(),
                 "backup": slave_stats.clone(),
+                "gcp": gcp_stats,
                 "master": master_stats,
                 "slave": slave_stats
             },
