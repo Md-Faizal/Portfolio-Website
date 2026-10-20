@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Sliders, Mail, ShieldAlert, Palette, CheckCircle2, Send, Lock } from 'lucide-react';
+import { Sliders, Mail, ShieldAlert, Palette, CheckCircle2, Send, Lock, ExternalLink, RefreshCw } from 'lucide-react';
 
 export default function SettingsTab({
   siteTheme,
