@@ -4,7 +4,6 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-      network: host
       args:
         BUILDKIT_INLINE_CACHE: "1"
     image: personal-site:latest
