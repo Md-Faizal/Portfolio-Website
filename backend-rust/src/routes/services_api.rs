@@ -73,9 +73,9 @@ fn get_ipc_dir() -> &'static str {
 async fn bloomberg_terminal_status() -> &'static str {
     // 1. Check in-memory cache (5s TTL to avoid repetitive SSH roundtrips)
     if let Ok(guard) = BLOOMBERG_CACHE.lock() {
-        if let Some((ts, status)) = *guard {
+        if let Some((ts, status)) = guard.as_ref() {
             if ts.elapsed() < Duration::from_secs(5) {
-                return status;
+                return *status;
             }
         }
     }
