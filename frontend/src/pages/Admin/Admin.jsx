@@ -158,12 +158,12 @@ export default function Admin({ onExit }) {
       name: 'Bloomberg Market Terminal',
       node: 'container-of-souls',
       port: 443,
-      status: 'running',
+      status: 'stopped',
       type: 'docker',
-      serving_state: 'active',
-      traffic_route: 'Actively Serving: bloom.faizal.uk on container-of-souls',
-      cpu_usage: '1.6% avg',
-      ram_usage: '90 MB',
+      serving_state: 'idle',
+      traffic_route: 'bloom.faizal.uk on container-of-souls',
+      cpu_usage: '0.0%',
+      ram_usage: '0 MB',
       storage_usage: '340 MB'
     },
     {
@@ -380,11 +380,12 @@ export default function Admin({ onExit }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action })
       });
-      if (res.ok) {
-        showToast(`Service ${serviceId} ${action} command confirmed`);
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.success) {
+        showToast(data.message || `Service ${serviceId} ${action} command confirmed`);
         setTimeout(fetchAllData, 1500);
       } else {
-        showToast(`Failed to ${action} ${serviceId}`, 'error');
+        showToast(data.error || `Failed to ${action} ${serviceId}`, 'error');
       }
     } catch (err) {
       showToast(`Error: ${err.message}`, 'error');

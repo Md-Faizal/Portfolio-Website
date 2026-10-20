@@ -47,7 +47,7 @@ while true; do
         output="Unsupported remote-docker service '$service'"
       fi
     elif [[ "$action" =~ ^(start|stop|restart)$ ]]; then
-      if [[ "$control_type" == systemctl && "$service" =~ ^(cs-panel|nginx|nexus-backend)$ ]]; then
+      if [[ "$control_type" == systemctl && "$service" =~ ^(cs-panel|nginx|nexus-backend|cockpit)$ ]]; then
         output=$(systemctl "$action" "${service}.service" 2>&1)
         exit_code=$?
       elif [[ "$control_type" == docker && "$service" =~ ^(stalwart-mail|macos-server-blue|personal-site-rust)$ ]]; then

@@ -6,8 +6,11 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::time::Duration;
+use std::sync::Mutex;
+use std::time::{Duration, Instant};
 use tokio::time::sleep;
+
+static BLOOMBERG_CACHE: Mutex<Option<(Instant, &'static str)>> = Mutex::new(None);
 
 // ─── Service / Container info ────────────────────────────────────────────────
 
@@ -57,68 +60,61 @@ fn docker_running(name: &str) -> bool {
         .unwrap_or(false)
 }
 
+fn get_ipc_dir() -> &'static str {
+    if std::path::Path::new("/run/stack-service-ipc").is_dir() {
+        "/run/stack-service-ipc"
+    } else if std::path::Path::new("/home/ubuntu/stack/ops/ipc").is_dir() {
+        "/home/ubuntu/stack/ops/ipc"
+    } else {
+        "/tmp"
+    }
+}
+
 async fn bloomberg_terminal_status() -> &'static str {
-    // 1. Direct active network probe to bloom.faizal.uk:443
-    // Bloomberg Terminal serves live on bloom.faizal.uk via container-of-souls.
-    let net_probe = tokio::time::timeout(
-        Duration::from_millis(1500),
-        tokio::net::TcpStream::connect("bloom.faizal.uk:443"),
-    ).await;
-
-    if let Ok(Ok(_)) = net_probe {
-        return "running";
+    // 1. Check in-memory cache (5s TTL to avoid repetitive SSH roundtrips)
+    if let Ok(guard) = BLOOMBERG_CACHE.lock() {
+        if let Some((ts, status)) = *guard {
+            if ts.elapsed() < Duration::from_secs(5) {
+                return status;
+            }
+        }
     }
 
-    // 2. Direct probe to container-of-souls internal slots (18081 blue / 18082 green)
-    let internal_probe = tokio::time::timeout(
-        Duration::from_millis(800),
-        tokio::net::TcpStream::connect("10.0.0.195:18081"),
-    ).await;
-    if let Ok(Ok(_)) = internal_probe {
-        return "running";
-    }
-
-    let internal_probe_green = tokio::time::timeout(
-        Duration::from_millis(800),
-        tokio::net::TcpStream::connect("10.0.0.195:18082"),
-    ).await;
-    if let Ok(Ok(_)) = internal_probe_green {
-        return "running";
-    }
-
-    // 3. Fallback to IPC request (checking both possible IPC dirs)
+    // 2. Query host service runner via IPC
     let req_id = format!(
         "bloomberg-terminal_status_{}",
         chrono::Utc::now().timestamp_micros()
     );
-    let ipc_dir = if std::path::Path::new("/home/ubuntu/stack/ops/ipc").is_dir() {
-        "/home/ubuntu/stack/ops/ipc"
-    } else {
-        "/run/stack-service-ipc"
-    };
+    let ipc_dir = get_ipc_dir();
     let req_path = format!("{}/{}.req", ipc_dir, req_id);
     let res_path = format!("{}/{}.res", ipc_dir, req_id);
 
+    let mut detected_status = "stopped";
+
     if let Ok(_) = fs::write(&req_path, "remote-docker status bloomberg-terminal\n") {
-        for _ in 0..8 {
+        for _ in 0..15 {
             sleep(Duration::from_millis(200)).await;
             if let Ok(response) = fs::read_to_string(&res_path) {
                 let _ = fs::remove_file(&res_path);
                 let _ = fs::remove_file(&req_path);
-                let resp_lower = response.to_lowercase();
-                if resp_lower.contains("running") || resp_lower.contains("active") || resp_lower.contains("up") || resp_lower.contains("blue") || resp_lower.contains("green") {
-                    return "running";
-                } else if resp_lower.contains("stopped") || resp_lower.contains("exited") {
-                    return "stopped";
+                let resp_upper = response.to_uppercase();
+                if resp_upper.contains("OUTPUT:RUNNING") || resp_upper.contains("RUNNING") {
+                    detected_status = "running";
+                } else {
+                    detected_status = "stopped";
                 }
-                return "running";
+                break;
             }
         }
         let _ = fs::remove_file(&req_path);
     }
 
-    // Default to running if live probe was temporarily slow rather than falsely marking offline
-    "running"
+    // Cache the detected status
+    if let Ok(mut guard) = BLOOMBERG_CACHE.lock() {
+        *guard = Some((Instant::now(), detected_status));
+    }
+
+    detected_status
 }
 
 pub async fn list_services(State(_state): State<SharedState>) -> impl IntoResponse {
@@ -380,7 +376,7 @@ pub async fn list_services(State(_state): State<SharedState>) -> impl IntoRespon
             control_type: "remote-docker".into(),
             service_type: "docker".into(),
             node: "container-of-souls".into(),
-            enabled: true,
+            enabled: bloomberg_status == "running",
             port: 443,
             memory_mb: if bloomberg_status == "running" { 90.0 } else { 0.0 },
             cpu_usage: (if bloomberg_status == "running" { "1.6% avg" } else { "0.0%" }).into(),
@@ -430,9 +426,10 @@ pub async fn control_service(
     };
 
     // Write IPC request for host runner
+    let ipc_dir = get_ipc_dir();
     let req_id = format!("{}_{}", service_id, chrono::Utc::now().timestamp_millis());
-    let req_path = format!("/run/stack-service-ipc/{}.req", req_id);
-    let res_path = format!("/run/stack-service-ipc/{}.res", req_id);
+    let req_path = format!("{}/{}.req", ipc_dir, req_id);
+    let res_path = format!("{}/{}.res", ipc_dir, req_id);
 
     // Format: "<control_type> <action> <service>"
     let content = format!("{} {} {}\n", control_type, valid_action, service_id);
@@ -443,14 +440,32 @@ pub async fn control_service(
         }));
     }
 
-    // Wait up to 8 seconds for host runner to respond
+    // Wait up to 25 seconds for host runner to respond (50 * 500ms)
     let mut response_text = None;
-    for _ in 0..16 {
+    for _ in 0..50 {
         sleep(Duration::from_millis(500)).await;
         if let Ok(res) = fs::read_to_string(&res_path) {
             response_text = Some(res);
             let _ = fs::remove_file(&res_path);
             break;
+        }
+    }
+
+    let success = match &response_text {
+        Some(res) => res.contains("EXIT:0"),
+        None => false,
+    };
+
+    if service_id == "bloomberg-terminal" {
+        if let Ok(mut guard) = BLOOMBERG_CACHE.lock() {
+            if success {
+                *guard = Some((
+                    Instant::now(),
+                    if valid_action == "stop" { "stopped" } else { "running" },
+                ));
+            } else {
+                *guard = None;
+            }
         }
     }
 
