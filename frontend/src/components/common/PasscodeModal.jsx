@@ -65,10 +65,28 @@ export default function PasscodeModal({ isOpen, onClose, onSuccess }) {
     }
   };
 
-  const checkPasscode = (code) => {
+  const checkPasscode = async (code) => {
     if (code.length === 4) {
-      // Passcode validation (accepts admin passcode '2004', '2026', '0000', '1234')
-      if (code === '2004' || code === '2026' || code === '0000' || code === '1234') {
+      let isValid = false;
+      try {
+        const res = await fetch('/api/verify-pin', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pin: code })
+        });
+        const data = await res.json();
+        if (data && data.success) {
+          isValid = true;
+        }
+      } catch (err) {
+        // Fallback to local check if offline or network error
+        const localSavedPin = localStorage.getItem('faizal_admin_pin');
+        if (code === localSavedPin || code === '2004' || code === '2026' || code === '0000' || code === '1234') {
+          isValid = true;
+        }
+      }
+
+      if (isValid) {
         localStorage.setItem('faizal_admin_pin', code);
         setIsSuccess(true);
         setTimeout(() => {

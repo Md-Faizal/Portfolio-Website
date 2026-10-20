@@ -5,10 +5,10 @@ import PasscodeModal from './components/common/PasscodeModal';
 import './admin.css';
 
 function StandaloneAdminApp() {
-  // Check if PIN 2004 (or valid) was already entered
+  // Check if valid 4-digit PIN was already entered
   const [authenticated, setAuthenticated] = useState(() => {
     const saved = localStorage.getItem('faizal_admin_pin');
-    return saved === '2004';
+    return Boolean(saved && /^\d{4}$/.test(saved));
   });
 
   const handleSuccess = () => {

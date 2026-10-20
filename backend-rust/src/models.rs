@@ -86,6 +86,12 @@ pub struct VerifyPinRequest {
     pub pin: String,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct ChangePinRequest {
+    pub current_pin: String,
+    pub new_pin: String,
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct HealthReportRecord {
     pub id: i64,

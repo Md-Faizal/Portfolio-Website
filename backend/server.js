@@ -495,18 +495,36 @@ app.post('/api/test-email', requireAdmin, async (req, res) => {
 app.post('/api/verify-pin', (req, res) => {
     const { pin } = req.body;
     const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
-    console.log(`PIN verification attempt from ${ip}`);
-    if (pin === '2004') {
-        db.run(`INSERT INTO access_logs (ip, status) VALUES (?, ?)`, [ip, 'SUCCESS'], (err) => {
-            if (err) console.error('Log insert error:', err.message);
+    db.get("SELECT value FROM settings WHERE key = 'admin_pin' AND length(value) = 4", [], (err, row) => {
+        const effectivePin = (row && row.value) ? row.value : '2004';
+        const isValid = pin === effectivePin;
+        const status = isValid ? 'SUCCESS' : 'FAILURE';
+        db.run(`INSERT INTO access_logs (ip, status) VALUES (?, ?)`, [ip, status], (logErr) => {
+            if (logErr) console.error('Access logs log error:', logErr.message);
         });
-        res.json({ success: true });
-    } else {
-        db.run(`INSERT INTO access_logs (ip, status) VALUES (?, ?)`, [ip, 'FAILURE'], (err) => {
-            if (err) console.error('Access logs failure log database error:', err.message);
+        res.json({ success: isValid });
+    });
+});
+
+app.post('/api/change-pin', (req, res) => {
+    const { current_pin, new_pin } = req.body;
+    const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+    db.get("SELECT value FROM settings WHERE key = 'admin_pin' AND length(value) = 4", [], (err, row) => {
+        const effectivePin = (row && row.value) ? row.value : '2004';
+        if (current_pin !== effectivePin) {
+            return res.status(403).json({ success: false, error: 'Current 4-digit PIN is incorrect.' });
+        }
+        if (!new_pin || new_pin.length !== 4 || !/^\d{4}$/.test(new_pin)) {
+            return res.status(400).json({ success: false, error: 'New PIN must be exactly 4 numeric digits.' });
+        }
+        db.run("INSERT OR REPLACE INTO settings (key, value) VALUES ('admin_pin', ?)", [new_pin], (saveErr) => {
+            if (saveErr) {
+                return res.status(500).json({ success: false, error: saveErr.message });
+            }
+            db.run(`INSERT INTO access_logs (ip, status) VALUES (?, 'PIN_CHANGED')`, [ip]);
+            res.json({ success: true, message: 'Admin PIN updated successfully.' });
         });
-        res.json({ success: false });
-    }
+    });
 });
 
 // Route to delete a message (Admin only)

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Sliders, Mail, ShieldAlert, Palette, CheckCircle2, Send, Lock, ExternalLink, RefreshCw } from 'lucide-react';
+import { Sliders, Mail, ShieldAlert, Palette, CheckCircle2, Send, Lock, ExternalLink, RefreshCw, KeyRound, Eye, EyeOff, AlertCircle } from 'lucide-react';
 
 export default function SettingsTab({
   siteTheme,
@@ -12,6 +12,14 @@ export default function SettingsTab({
   const [sendingTest, setSendingTest] = useState(false);
   const [maintenanceMode, setMaintenanceMode] = useState(false);
 
+  // 4-Digit Passcode Management State
+  const [currentPin, setCurrentPin] = useState('');
+  const [newPin, setNewPin] = useState('');
+  const [confirmPin, setConfirmPin] = useState('');
+  const [showPins, setShowPins] = useState(false);
+  const [changingPin, setChangingPin] = useState(false);
+  const [pinError, setPinError] = useState('');
+
   const handleTestEmail = async (e) => {
     e.preventDefault();
     if (!testEmailRecipient) return;
@@ -21,6 +29,60 @@ export default function SettingsTab({
       setTestEmailRecipient('');
     } finally {
       setSendingTest(false);
+    }
+  };
+
+  const handleChangePin = async (e) => {
+    e.preventDefault();
+    setPinError('');
+
+    if (!/^\d{4}$/.test(currentPin)) {
+      setPinError('Current PIN must be exactly 4 numeric digits.');
+      return;
+    }
+    if (!/^\d{4}$/.test(newPin)) {
+      setPinError('New PIN must be exactly 4 numeric digits.');
+      return;
+    }
+    if (newPin !== confirmPin) {
+      setPinError('New PIN and Confirm PIN do not match.');
+      return;
+    }
+    if (currentPin === newPin) {
+      setPinError('New PIN must be different from current PIN.');
+      return;
+    }
+
+    setChangingPin(true);
+    try {
+      const activeAuth = localStorage.getItem('faizal_admin_pin') || currentPin;
+      const res = await fetch('/api/change-pin', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': activeAuth,
+          'X-Admin-Pin': activeAuth
+        },
+        body: JSON.stringify({
+          current_pin: currentPin,
+          new_pin: newPin
+        })
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.success) {
+        localStorage.setItem('faizal_admin_pin', newPin);
+        setCurrentPin('');
+        setNewPin('');
+        setConfirmPin('');
+        showToast?.('4-digit Admin passcode successfully updated!');
+      } else {
+        setPinError(data.error || 'Failed to update PIN. Please verify your current PIN.');
+      }
+    } catch (err) {
+      setPinError('Network error connecting to API.');
+    } finally {
+      setChangingPin(false);
     }
   };
 
@@ -312,7 +374,7 @@ export default function SettingsTab({
           </label>
         </div>
 
-        {/* Master PIN & Security Status */}
+        {/* Master 4-Digit Passcode Management */}
         <div
           className="rounded-3xl border flex flex-col justify-between"
           style={{
@@ -321,41 +383,161 @@ export default function SettingsTab({
             borderColor: 'rgba(255, 255, 255, 0.09)',
             backdropFilter: 'blur(20px)',
             borderRadius: '24px',
-            gap: '16px'
+            gap: '20px'
           }}
         >
-          <div className="flex items-center gap-3">
-            <div
-              className="rounded-xl flex items-center justify-center"
-              style={{
-                width: '42px',
-                height: '42px',
-                backgroundColor: 'rgba(255, 255, 255, 0.04)',
-                border: '1px solid rgba(255, 255, 255, 0.08)',
-                borderRadius: '12px'
-              }}
-            >
-              <Lock className="w-5 h-5 text-[#89ff00]" />
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div
+                className="rounded-xl flex items-center justify-center"
+                style={{
+                  width: '42px',
+                  height: '42px',
+                  backgroundColor: 'rgba(137, 255, 0, 0.08)',
+                  border: '1px solid rgba(137, 255, 0, 0.25)',
+                  borderRadius: '12px'
+                }}
+              >
+                <KeyRound className="w-5 h-5 text-[#89ff00]" />
+              </div>
+              <div>
+                <h3 className="text-base font-semibold text-white">Master 4-Digit Passcode</h3>
+                <p className="text-xs text-neutral-400 mt-0.5">Change the 4-digit security PIN used to unlock this Admin console.</p>
+              </div>
             </div>
-            <div>
-              <h3 className="text-base font-semibold text-white">Console Session Authentication</h3>
-              <p className="text-xs text-neutral-400 mt-0.5">Active session secured with SHA-256 PIN validation.</p>
-            </div>
-          </div>
-          <div
-            className="flex items-center justify-between text-xs font-mono"
-            style={{
-              padding: '14px 18px',
-              backgroundColor: 'rgba(0, 0, 0, 0.45)',
-              border: '1px solid rgba(255, 255, 255, 0.06)',
-              borderRadius: '16px'
-            }}
-          >
-            <span className="text-neutral-400">PIN Protection Status</span>
-            <span className="text-[#89ff00] font-semibold flex items-center gap-1.5">
-              <CheckCircle2 className="w-3.5 h-3.5" /> SECURE (ENFORCED)
+            <span className="px-2.5 py-1 rounded-full text-[10px] font-mono font-bold bg-[#89ff00]/15 text-[#89ff00] border border-[#89ff00]/30 flex items-center gap-1.5">
+              <CheckCircle2 className="w-3 h-3" />
+              ENFORCED 4-DIGIT PIN
             </span>
           </div>
+
+          {/* Form to change 4-digit passcode */}
+          <form onSubmit={handleChangePin} className="space-y-4 pt-1">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              {/* Current PIN */}
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-mono text-neutral-400 uppercase tracking-wider font-semibold">
+                  Current PIN
+                </label>
+                <div className="relative">
+                  <input
+                    type={showPins ? 'text' : 'password'}
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    maxLength={4}
+                    required
+                    value={currentPin}
+                    onChange={(e) => setCurrentPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
+                    placeholder="••••"
+                    style={{
+                      padding: '12px 14px',
+                      backgroundColor: 'rgba(0, 0, 0, 0.5)',
+                      border: '1px solid rgba(255, 255, 255, 0.12)',
+                      borderRadius: '12px',
+                      color: '#fff',
+                      width: '100%',
+                      letterSpacing: showPins ? '0.15em' : '0.3em'
+                    }}
+                    className="text-center font-mono text-sm placeholder:text-neutral-600 focus:outline-none focus:border-[#89ff00]/60 transition-colors"
+                  />
+                </div>
+              </div>
+
+              {/* New PIN */}
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-mono text-neutral-400 uppercase tracking-wider font-semibold">
+                  New 4-Digit PIN
+                </label>
+                <div className="relative">
+                  <input
+                    type={showPins ? 'text' : 'password'}
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    maxLength={4}
+                    required
+                    value={newPin}
+                    onChange={(e) => setNewPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
+                    placeholder="••••"
+                    style={{
+                      padding: '12px 14px',
+                      backgroundColor: 'rgba(0, 0, 0, 0.5)',
+                      border: '1px solid rgba(255, 255, 255, 0.12)',
+                      borderRadius: '12px',
+                      color: '#fff',
+                      width: '100%',
+                      letterSpacing: showPins ? '0.15em' : '0.3em'
+                    }}
+                    className="text-center font-mono text-sm placeholder:text-neutral-600 focus:outline-none focus:border-[#89ff00]/60 transition-colors"
+                  />
+                </div>
+              </div>
+
+              {/* Confirm New PIN */}
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-mono text-neutral-400 uppercase tracking-wider font-semibold">
+                  Confirm New PIN
+                </label>
+                <div className="relative">
+                  <input
+                    type={showPins ? 'text' : 'password'}
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    maxLength={4}
+                    required
+                    value={confirmPin}
+                    onChange={(e) => setConfirmPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
+                    placeholder="••••"
+                    style={{
+                      padding: '12px 14px',
+                      backgroundColor: 'rgba(0, 0, 0, 0.5)',
+                      border: '1px solid rgba(255, 255, 255, 0.12)',
+                      borderRadius: '12px',
+                      color: '#fff',
+                      width: '100%',
+                      letterSpacing: showPins ? '0.15em' : '0.3em'
+                    }}
+                    className="text-center font-mono text-sm placeholder:text-neutral-600 focus:outline-none focus:border-[#89ff00]/60 transition-colors"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Error Message Alert */}
+            {pinError && (
+              <div className="flex items-center gap-2 p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-xs font-mono">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{pinError}</span>
+              </div>
+            )}
+
+            {/* Form Actions */}
+            <div className="flex items-center justify-between pt-1">
+              <button
+                type="button"
+                onClick={() => setShowPins(!showPins)}
+                className="text-xs font-mono text-neutral-400 hover:text-white transition-colors flex items-center gap-1.5 cursor-pointer"
+              >
+                {showPins ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                <span>{showPins ? 'Hide Digits' : 'Reveal Digits'}</span>
+              </button>
+
+              <button
+                type="submit"
+                disabled={changingPin || currentPin.length !== 4 || newPin.length !== 4 || confirmPin.length !== 4}
+                style={{
+                  padding: '10px 22px',
+                  backgroundColor: 'rgba(137, 255, 0, 0.12)',
+                  border: '1px solid rgba(137, 255, 0, 0.35)',
+                  borderRadius: '12px',
+                  color: '#89ff00'
+                }}
+                className="hover:bg-[#89ff00]/20 text-xs font-mono font-bold transition-all cursor-pointer flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                <KeyRound className="w-3.5 h-3.5" />
+                <span>{changingPin ? 'Updating Passcode...' : 'Save New Passcode'}</span>
+              </button>
+            </div>
+          </form>
         </div>
       </div>
     </div>
