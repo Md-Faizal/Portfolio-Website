@@ -71,10 +71,10 @@ fn get_ipc_dir() -> &'static str {
 }
 
 async fn bloomberg_terminal_status() -> &'static str {
-    // 1. Check in-memory cache (5s TTL to avoid repetitive SSH roundtrips)
+    // 1. Check in-memory cache (15s TTL to avoid repetitive SSH roundtrips)
     if let Ok(guard) = BLOOMBERG_CACHE.lock() {
         if let Some((ts, status)) = guard.as_ref() {
-            if ts.elapsed() < Duration::from_secs(5) {
+            if ts.elapsed() < Duration::from_secs(15) {
                 return *status;
             }
         }
@@ -92,7 +92,7 @@ async fn bloomberg_terminal_status() -> &'static str {
     let mut detected_status = "stopped";
 
     if let Ok(_) = fs::write(&req_path, "remote-docker status bloomberg-terminal\n") {
-        for _ in 0..15 {
+        for _ in 0..30 {
             sleep(Duration::from_millis(200)).await;
             if let Ok(response) = fs::read_to_string(&res_path) {
                 let _ = fs::remove_file(&res_path);
