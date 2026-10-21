@@ -28,6 +28,7 @@ export default function ServiceCard({ service, onAction }) {
   };
 
   const isRunning = service.status === 'running' || service.status === 'online';
+  const statusUnavailable = service.status === 'unavailable';
 
   // Determine serving state
   const servingState = service.serving_state || (
@@ -214,7 +215,7 @@ export default function ServiceCard({ service, onAction }) {
             {!isActivelyServing && !isStandby && !isBothCluster && !isCluster && (
               <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-mono font-medium bg-white/5 text-neutral-400 border border-white/10">
                 <span className="w-1.5 h-1.5 rounded-full bg-neutral-500" />
-                OFF / IDLE
+                {statusUnavailable ? 'STATUS UNAVAILABLE' : 'OFF / IDLE'}
               </span>
             )}
           </div>
@@ -269,7 +270,7 @@ export default function ServiceCard({ service, onAction }) {
                   : 'On-Demand Engine'}
               </span>
               <span className={`text-[9px] font-mono ${isRunning ? 'text-[#89ff00]' : 'text-neutral-400'}`}>
-                {isRunning ? 'RUNNING' : 'STOPPED'}
+                {isRunning ? 'RUNNING' : statusUnavailable ? 'UNAVAILABLE' : 'STOPPED'}
               </span>
             </div>
             <div className="text-xs text-white font-medium mt-1 leading-relaxed break-words whitespace-normal">
@@ -308,7 +309,7 @@ export default function ServiceCard({ service, onAction }) {
           >
             <div className="flex items-center gap-1.5 text-[10px] font-mono text-neutral-400">
               <Cpu className="w-3 h-3 text-[#89ff00]" />
-              <span>AVG CPU</span>
+              <span>{service.id === 'mc-manager' ? 'NODE CPU' : 'AVG CPU'}</span>
             </div>
             <span className="text-xs font-mono font-bold text-white mt-1">
               {metrics.cpu}
@@ -325,7 +326,7 @@ export default function ServiceCard({ service, onAction }) {
           >
             <div className="flex items-center gap-1.5 text-[10px] font-mono text-neutral-400">
               <Activity className="w-3 h-3 text-sky-400" />
-              <span>AVG RAM</span>
+              <span>{service.id === 'mc-manager' ? 'NODE RAM' : 'AVG RAM'}</span>
             </div>
             <span className="text-xs font-mono font-bold text-white mt-1">
               {metrics.ram}
@@ -394,7 +395,7 @@ export default function ServiceCard({ service, onAction }) {
       >
         <button
           onClick={() => handleAction('restart')}
-          disabled={Boolean(loadingAction)}
+          disabled={Boolean(loadingAction) || statusUnavailable}
           className="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl text-xs font-mono font-medium text-white transition-all cursor-pointer disabled:opacity-50"
           style={{
             backgroundColor: 'rgba(255, 255, 255, 0.06)',
@@ -413,7 +414,7 @@ export default function ServiceCard({ service, onAction }) {
         {isRunning ? (
           <button
             onClick={() => handleAction('stop')}
-            disabled={Boolean(loadingAction)}
+            disabled={Boolean(loadingAction) || statusUnavailable}
             className="flex items-center justify-center p-2 rounded-xl text-[#ff3366] transition-all cursor-pointer disabled:opacity-50"
             style={{
               backgroundColor: 'rgba(255, 51, 102, 0.12)',
@@ -426,7 +427,7 @@ export default function ServiceCard({ service, onAction }) {
         ) : (
           <button
             onClick={() => handleAction('start')}
-            disabled={Boolean(loadingAction)}
+            disabled={Boolean(loadingAction) || statusUnavailable}
             className="flex items-center justify-center p-2 rounded-xl text-[#89ff00] transition-all cursor-pointer disabled:opacity-50"
             style={{
               backgroundColor: 'rgba(137, 255, 0, 0.12)',

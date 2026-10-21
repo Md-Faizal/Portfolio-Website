@@ -11,6 +11,7 @@ use std::time::{Duration, Instant};
 use tokio::time::sleep;
 
 static BLOOMBERG_CACHE: Mutex<Option<(Instant, &'static str)>> = Mutex::new(None);
+static MC_MANAGER_CACHE: Mutex<Option<(Instant, Option<bool>)>> = Mutex::new(None);
 
 // ─── Service / Container info ────────────────────────────────────────────────
 
@@ -70,6 +71,52 @@ fn get_ipc_dir() -> &'static str {
     }
 }
 
+async fn remote_minecraft_status() -> Option<bool> {
+    if let Ok(cache) = MC_MANAGER_CACHE.lock() {
+        if let Some((checked_at, status)) = cache.as_ref() {
+            if checked_at.elapsed() < Duration::from_secs(10) {
+                return *status;
+            }
+        }
+    }
+
+    let req_id = format!(
+        "mc-manager_status_{}",
+        chrono::Utc::now().timestamp_micros()
+    );
+    let ipc_dir = get_ipc_dir();
+    let req_path = format!("{}/{}.req", ipc_dir, req_id);
+    let res_path = format!("{}/{}.res", ipc_dir, req_id);
+    let mut status = None;
+
+    if fs::write(&req_path, "remote-docker status mc-manager\n").is_ok() {
+        for _ in 0..20 {
+            sleep(Duration::from_millis(100)).await;
+            if let Ok(response) = fs::read_to_string(&res_path) {
+                let _ = fs::remove_file(&res_path);
+                let output = response
+                    .lines()
+                    .find_map(|line| line.strip_prefix("OUTPUT:"))
+                    .map(str::trim);
+                if response.lines().any(|line| line == "EXIT:0") {
+                    status = match output {
+                        Some("RUNNING") => Some(true),
+                        Some("STOPPED") => Some(false),
+                        _ => None,
+                    };
+                }
+                break;
+            }
+        }
+        let _ = fs::remove_file(&req_path);
+    }
+
+    if let Ok(mut cache) = MC_MANAGER_CACHE.lock() {
+        *cache = Some((Instant::now(), status));
+    }
+    status
+}
+
 async fn bloomberg_terminal_status() -> &'static str {
     // 1. Check in-memory cache (15s TTL to avoid repetitive SSH roundtrips)
     if let Ok(guard) = BLOOMBERG_CACHE.lock() {
@@ -119,14 +166,15 @@ async fn bloomberg_terminal_status() -> &'static str {
 
 pub async fn list_services(State(_state): State<SharedState>) -> impl IntoResponse {
     // Probe ports concurrently
-    let (cs_online, mc_online, _stall_admin, stall_smtps, stall_imap, nexus_online) = tokio::join!(
+    let (cs_online, mc_status, _stall_admin, stall_smtps, stall_imap, nexus_online) = tokio::join!(
         check_tcp_port(3005),
-        check_tcp_port(5000),
+        remote_minecraft_status(),
         check_tcp_port(8080),
         check_tcp_port(465),
         check_tcp_port(993),
         check_tcp_port(3010),
     );
+    let mc_online = mc_status == Some(true);
 
     // Docker container states
     let stall_running = docker_running("stalwart-mail");
@@ -330,21 +378,29 @@ pub async fn list_services(State(_state): State<SharedState>) -> impl IntoRespon
         ServiceInfo {
             id: "mc-manager".into(),
             name: "Minecraft Bedrock Manager".into(),
-            description: "Bedrock server + web management portal on container-of-souls compute node (mine.faizal.uk)".into(),
+            description: "Bedrock and Paper server manager hosted on the GCP pro node; Paper requires Java 21 and explicit EULA acceptance.".into(),
             category: "game".into(),
             group: "On-Demand Game Engines".into(),
-            status: if mc_online { "running".into() } else { "stopped".into() },
+            status: match mc_status {
+                Some(true) => "running".into(),
+                Some(false) => "stopped".into(),
+                None => "unavailable".into(),
+            },
             control_type: "remote-docker".into(),
             service_type: "docker".into(),
-            node: "container-of-souls".into(),
+            node: "prometheus".into(),
             enabled: false,
             port: 5000,
-            memory_mb: if mc_online { 180.0 } else { 0.0 },
-            cpu_usage: (if mc_online { "4.2% avg" } else { "0.0%" }).into(),
-            ram_usage: (if mc_online { "180 MB" } else { "0 MB" }).into(),
-            storage_usage: "1.8 GB".into(),
-            serving_state: if mc_online { "active".into() } else { "idle".into() },
-            traffic_route: "mine.faizal.uk (Port 5000 / 19132) on container-of-souls".into(),
+            memory_mb: 0.0,
+            cpu_usage: if mc_online { "See GCP node telemetry".into() } else { "—".into() },
+            ram_usage: if mc_online { "See GCP node telemetry".into() } else { "—".into() },
+            storage_usage: "Persistent /home/ubuntu/minecraft-server".into(),
+            serving_state: match mc_status {
+                Some(true) => "active".into(),
+                Some(false) => "idle".into(),
+                None => "unknown".into(),
+            },
+            traffic_route: "mine.faizal.uk via my-mac Nginx → pro; Bedrock UDP 19132 and Java TCP 25565 → pro".into(),
         },
         // ── Core application backends ───────────────────────────────────────
         ServiceInfo {
@@ -465,6 +521,11 @@ pub async fn control_service(
                 ));
             } else {
                 *guard = None;
+            }
+            if service_id == "mc-manager" {
+                if let Ok(mut guard) = MC_MANAGER_CACHE.lock() {
+                    *guard = None;
+                }
             }
         }
     }

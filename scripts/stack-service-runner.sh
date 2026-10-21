@@ -37,12 +37,24 @@ while true; do
           exit_code=$?
         fi
       elif [[ "$service" =~ ^(bedrock-server|minecraft|mc-manager|stalwart-mail|stalwart-mail-standby|macos-server-green|personal-site-rust)$ ]]; then
-        target_container="$service"
         if [[ "$service" == "mc-manager" ]]; then
-          target_container="minecraft"
+          remote_host="prometheus"
+          target_container="minecraft-bedrock-manager"
+          if [[ "$action" == "status" ]]; then
+            output=$(ssh "${ssh_options[@]}" "$remote_host" \
+              "if docker inspect -f '{{.State.Running}}' '$target_container' 2>/dev/null | grep -qx true; then printf RUNNING; else printf STOPPED; fi")
+            exit_code=$?
+          else
+            output=$(ssh "${ssh_options[@]}" "$remote_host" \
+              "docker $action '$target_container' 2>&1")
+            exit_code=$?
+          fi
+        else
+          remote_host="container-of-souls"
+          target_container="$service"
+          output=$(ssh "${ssh_options[@]}" "$remote_host" "docker $action $target_container 2>&1 || docker $action $service 2>&1 || docker $action bedrock-server 2>&1")
+          exit_code=$?
         fi
-        output=$(ssh "${ssh_options[@]}" container-of-souls "docker $action $target_container 2>&1 || docker $action $service 2>&1 || docker $action bedrock-server 2>&1")
-        exit_code=$?
       else
         output="Unsupported remote-docker service '$service'"
       fi

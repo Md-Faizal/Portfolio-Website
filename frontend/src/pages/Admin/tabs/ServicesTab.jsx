@@ -17,13 +17,14 @@ import {
 import ServiceCard from '../components/ServiceCard';
 
 export default function ServicesTab({ services = [], onServiceAction, onRefresh, refreshing }) {
-  const [nodeFilter, setNodeFilter] = useState('all'); // 'all' | 'primary' | 'backup' | 'both'
+  const [nodeFilter, setNodeFilter] = useState('all'); // 'all' | 'primary' | 'backup' | 'gcp' | 'both'
   const [typeFilter, setTypeFilter] = useState('all'); // 'all' | 'docker' | 'systemctl'
   const [servingFilter, setServingFilter] = useState('all'); // 'all' | 'serving' | 'standby' | 'off'
 
   const getNodeCategory = (service) => {
     const node = (service.node || '').toLowerCase();
     if (node === 'both' || node === 'cluster') return 'both';
+    if (node === 'prometheus' || node === 'pro' || node === 'gcp') return 'gcp';
     if (node === 'container-of-souls' || node === 'cos' || node === 'secondary' || node === 'backup') return 'backup';
     return 'primary';
   };
@@ -66,14 +67,17 @@ export default function ServicesTab({ services = [], onServiceAction, onRefresh,
 
   const primaryServices = services.filter((s) => getNodeCategory(s) === 'primary');
   const backupServices = services.filter((s) => getNodeCategory(s) === 'backup');
+  const gcpServices = services.filter((s) => getNodeCategory(s) === 'gcp');
   const bothServices = services.filter((s) => getNodeCategory(s) === 'both');
 
   const visiblePrimary = sortServices(primaryServices.filter(matchesFilter));
   const visibleBackup = sortServices(backupServices.filter(matchesFilter));
+  const visibleGcp = sortServices(gcpServices.filter(matchesFilter));
   const visibleBoth = sortServices(bothServices.filter(matchesFilter));
 
   const primaryOnline = primaryServices.filter(isOnline).length;
   const backupOnline = backupServices.filter(isOnline).length;
+  const gcpOnline = gcpServices.filter(isOnline).length;
   const bothOnline = bothServices.filter(isOnline).length;
   const totalOnline = services.filter(isOnline).length;
 
@@ -223,6 +227,18 @@ export default function ServicesTab({ services = [], onServiceAction, onRefresh,
           >
             <Cpu className="w-3.5 h-3.5" />
             <span>Backup Node ({backupServices.length})</span>
+          </button>
+
+          <button
+            onClick={() => setNodeFilter('gcp')}
+            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-mono transition-all cursor-pointer ${
+              nodeFilter === 'gcp'
+                ? 'bg-amber-500/20 text-amber-400 font-bold border border-amber-500/40 shadow-sm'
+                : 'text-neutral-400 hover:text-amber-400 hover:bg-amber-500/5 border border-transparent'
+            }`}
+          >
+            <Server className="w-3.5 h-3.5" />
+            <span>GCP / pro ({gcpServices.length})</span>
           </button>
 
           <button
@@ -438,7 +454,63 @@ export default function ServicesTab({ services = [], onServiceAction, onRefresh,
       )}
 
       {/* ──────────────────────────────────────────────────────────── */}
-      {/* 3. BOTH / DUAL-NODE CLUSTER FABRIC */}
+      {/* 3. GCP AUXILIARY NODE */}
+      {/* ──────────────────────────────────────────────────────────── */}
+      {(nodeFilter === 'all' || nodeFilter === 'gcp') && (
+        <section className="space-y-4">
+          <div
+            className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-5 rounded-2xl backdrop-blur-md"
+            style={{
+              backgroundColor: 'rgba(18, 19, 22, 0.75)',
+              border: '1px solid rgba(245, 158, 11, 0.25)',
+              boxShadow: '0 4px 20px 0 rgba(0, 0, 0, 0.35)'
+            }}
+          >
+            <div className="flex items-center gap-3.5">
+              <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-400 shrink-0">
+                <Server className="w-5 h-5" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2.5 flex-wrap">
+                  <h3 className="text-base sm:text-lg font-bold text-white tracking-tight leading-snug">
+                    Node 03 // GCP Auxiliary // pro
+                  </h3>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-amber-500/15 text-amber-400 border border-amber-500/30">
+                    ON-DEMAND COMPUTE
+                  </span>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-medium bg-white/5 text-neutral-300 border border-white/10">
+                    35.208.86.56
+                  </span>
+                </div>
+                <p className="text-xs font-mono text-neutral-400 mt-1">
+                  GCP e2-micro node hosting the Minecraft Bedrock and Paper manager on demand.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 self-start sm:self-center shrink-0">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-mono font-bold bg-amber-500/10 text-amber-400 border border-amber-500/25">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                {gcpOnline} of {gcpServices.length} Active
+              </span>
+            </div>
+          </div>
+
+          {visibleGcp.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {visibleGcp.map((service) => (
+                <ServiceCard key={service.id} service={service} onAction={onServiceAction} />
+              ))}
+            </div>
+          ) : (
+            <div className="p-8 text-center rounded-2xl bg-white/[0.02] border border-white/5 text-neutral-400 text-xs font-mono">
+              No matching services on the GCP pro node for active filters.
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* ──────────────────────────────────────────────────────────── */}
+      {/* 4. BOTH / DUAL-NODE CLUSTER FABRIC */}
       {/* ──────────────────────────────────────────────────────────── */}
       {(nodeFilter === 'all' || nodeFilter === 'both') && (
         <section className="space-y-4">

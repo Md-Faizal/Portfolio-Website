@@ -258,7 +258,7 @@ export default function ClusterTab({ cluster, onOpenReportPreview }) {
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="text-base sm:text-lg font-bold text-white leading-tight">
-                  Node 03 // GCP Auxiliary // {gcp.node || 'prometheus'}
+                  Node 03 // GCP pro // {gcp.node || 'prometheus'}
                 </h3>
                 <span className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-bold ${
                   gcpOnline
@@ -272,7 +272,7 @@ export default function ClusterTab({ cluster, onOpenReportPreview }) {
                 </span>
               </div>
               <p className="text-xs font-mono text-neutral-400 mt-0.5">
-                IP: <strong className="text-white">{gcp.ip || '35.208.86.56'}</strong> &bull; OS: {gcp.os || 'Ubuntu 26.04 LTS Minimal'} &bull; Role: e2-micro Always Free &bull; Uptime: {formatUptime(gcp.uptime)}
+                IP: <strong className="text-white">{gcp.ip || '35.208.86.56'}</strong> &bull; OS: {gcp.os || 'Ubuntu 26.04 LTS Minimal'} &bull; Role: Minecraft on-demand / e2-micro &bull; Uptime: {formatUptime(gcp.uptime)}
               </p>
             </div>
           </div>
@@ -319,7 +319,7 @@ export default function ClusterTab({ cluster, onOpenReportPreview }) {
         {/* Detailed 24h Telemetry Chart for Node 03 */}
         <VmTelemetryChart
           nodeName="prometheus"
-          roleLabel="GCP Auxiliary Node &bull; Always-Free e2-micro"
+          roleLabel="GCP pro &bull; Always-Free e2-micro"
           theme="amber"
           currentCpu={gcpCpu}
           currentRam={gcpMemUsed}
@@ -335,4 +335,3 @@ export default function ClusterTab({ cluster, onOpenReportPreview }) {
     </div>
   );
 }
-

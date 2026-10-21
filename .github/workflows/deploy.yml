@@ -231,6 +231,18 @@ jobs:
           TARGET_DIR="/home/ubuntu/stack/apps/personal-site"
           cd "$TARGET_DIR"
 
+          RUNNER_SOURCE="$TARGET_DIR/scripts/stack-service-runner.sh"
+          RUNNER_DEST="/home/ubuntu/stack/ops/service-runner.sh"
+          if [ ! -f "$RUNNER_SOURCE" ]; then
+            echo "❌ Updated host service runner is missing: $RUNNER_SOURCE"
+            exit 1
+          fi
+          sudo cp -p "$RUNNER_DEST" "$RUNNER_DEST.bak.$(date +%Y%m%d_%H%M%S)"
+          sudo install -o root -g root -m 0755 "$RUNNER_SOURCE" "$RUNNER_DEST.tmp"
+          sudo mv "$RUNNER_DEST.tmp" "$RUNNER_DEST"
+          sudo systemctl restart stack-service-runner.service
+          sudo systemctl is-active --quiet stack-service-runner.service
+
           # Ensure public web assets are world-readable and directories traversable for Nginx (www-data)
           chmod -R a+rX "$TARGET_DIR/public" "$TARGET_DIR/frontend/dist" 2>/dev/null || true
           chmod a+rx "$TARGET_DIR" /home/ubuntu /home/ubuntu/stack /home/ubuntu/stack/apps 2>/dev/null || true
