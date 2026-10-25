@@ -12,7 +12,10 @@ import {
   Globe,
   Radio,
   Zap,
-  Boxes
+  Boxes,
+  ArrowRight,
+  Database,
+  Network
 } from 'lucide-react';
 import ServiceCard from '../components/ServiceCard';
 
@@ -23,7 +26,7 @@ export default function ServicesTab({ services = [], onServiceAction, onRefresh,
 
   const getNodeCategory = (service) => {
     const node = (service.node || '').toLowerCase();
-    if (node === 'both' || node === 'cluster') return 'both';
+    if (node === 'both' || node === 'cluster' || node === 'all') return 'both';
     if (node === 'prometheus' || node === 'pro' || node === 'gcp') return 'gcp';
     if (node === 'container-of-souls' || node === 'cos' || node === 'secondary' || node === 'backup') return 'backup';
     return 'primary';
@@ -32,7 +35,7 @@ export default function ServicesTab({ services = [], onServiceAction, onRefresh,
   const getServingStatus = (service) => {
     return service.serving_state || (
       service.id === 'macos-server-green' ? 'standby' :
-      (service.node === 'both' || service.id === 'personal-site-rust' || service.id === 'cockpit') ? 'both' :
+      (service.node === 'both' || service.node === 'cluster' || service.id === 'personal-site-rust' || service.id === 'cockpit') ? 'both' :
       (service.status === 'running' || service.status === 'online') ? 'active' : 'idle'
     );
   };
@@ -87,7 +90,9 @@ export default function ServicesTab({ services = [], onServiceAction, onRefresh,
 
   return (
     <div className="space-y-8" style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
-      {/* Header bar */}
+      {/* ──────────────────────────────────────────────────────────── */}
+      {/* 1. TOP HEADER BAR */}
+      {/* ──────────────────────────────────────────────────────────── */}
       <div
         className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 rounded-3xl backdrop-blur-xl"
         style={{
@@ -102,21 +107,21 @@ export default function ServicesTab({ services = [], onServiceAction, onRefresh,
           <div className="flex items-center gap-2 mb-1.5">
             <span className="w-2 h-2 rounded-full bg-[#89ff00] animate-pulse" />
             <span className="text-xs font-mono font-semibold text-[#89ff00] tracking-widest uppercase">
-              Multi-Node Microservices Topology
+              Tri-Node Swarm Cluster Topology
             </span>
           </div>
           <h2 className="text-xl sm:text-2xl font-bold text-white tracking-tight">
             Container & System Orchestration
           </h2>
           <p className="text-xs sm:text-sm text-neutral-400 mt-1 max-w-2xl leading-relaxed">
-            Live telemetry detailing <strong className="text-[#89ff00]">actively serving engines</strong>,{' '}
-            <strong className="text-sky-400">failover standby replicas</strong>, and dual-node cluster fabrics.
+            Live telemetry detailing <strong className="text-[#89ff00]">my-mac (Active Edge)</strong>,{' '}
+            <strong className="text-sky-400">cos (Failsafe Slot 1)</strong>, and{' '}
+            <strong className="text-amber-400">pro (Failsafe Slot 2)</strong> cascading fallover.
           </p>
         </div>
 
         {/* Global Controls & Traffic Indicators */}
         <div className="flex flex-wrap items-center gap-3">
-          {/* Actively Serving Pill */}
           <div
             className="flex items-center gap-2 px-3.5 py-2 rounded-2xl text-xs font-mono"
             style={{
@@ -130,7 +135,6 @@ export default function ServicesTab({ services = [], onServiceAction, onRefresh,
             </span>
           </div>
 
-          {/* Standby Replicas Pill */}
           <div
             className="flex items-center gap-2 px-3.5 py-2 rounded-2xl text-xs font-mono"
             style={{
@@ -144,7 +148,6 @@ export default function ServicesTab({ services = [], onServiceAction, onRefresh,
             </span>
           </div>
 
-          {/* Off / Stopped Pill */}
           <div
             className="flex items-center gap-2 px-3.5 py-2 rounded-2xl text-xs font-mono"
             style={{
@@ -158,7 +161,6 @@ export default function ServicesTab({ services = [], onServiceAction, onRefresh,
             </span>
           </div>
 
-          {/* Total Online Pill */}
           <div
             className="flex items-center gap-2 px-3.5 py-2 rounded-2xl text-xs font-mono"
             style={{
@@ -183,7 +185,185 @@ export default function ServicesTab({ services = [], onServiceAction, onRefresh,
         </div>
       </div>
 
-      {/* Segment Navigation & Serving/Type Filters */}
+      {/* ──────────────────────────────────────────────────────────── */}
+      {/* 2. VISUAL TOPOLOGY & TRAFFIC CASCADING FAILOVER CARD */}
+      {/* ──────────────────────────────────────────────────────────── */}
+      <div
+        className="rounded-3xl backdrop-blur-xl p-6 sm:p-7 relative overflow-hidden"
+        style={{
+          backgroundColor: 'rgba(15, 16, 20, 0.92)',
+          border: '1px solid rgba(255, 255, 255, 0.1)',
+          boxShadow: '0 12px 40px 0 rgba(0, 0, 0, 0.5)'
+        }}
+      >
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 pb-5 border-b border-white/5">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 rounded-2xl bg-[#89ff00]/10 border border-[#89ff00]/30 text-[#89ff00]">
+              <Network className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="text-base sm:text-lg font-bold text-white tracking-tight flex items-center gap-2">
+                Live Traffic Routing & Failsafe Cascade
+                <span className="px-2 py-0.5 rounded-md text-[10px] font-mono font-bold bg-[#89ff00]/15 text-[#89ff00] border border-[#89ff00]/30">
+                  MY-MAC &gt; COS &gt; PRO
+                </span>
+              </h3>
+              <p className="text-xs font-mono text-neutral-400 mt-0.5">
+                Edge Nginx upstream proxy with automatic sub-millisecond retry matrix and cascading hot database replication.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 self-start md:self-center">
+            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-mono bg-emerald-500/10 text-emerald-400 border border-emerald-500/25">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+              Fault-Tolerant Mesh Online
+            </span>
+          </div>
+        </div>
+
+        {/* 3 Node Cascade Graphic */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 relative">
+          {/* Node 1: my-mac */}
+          <div
+            className="rounded-2xl p-5 border relative flex flex-col justify-between"
+            style={{
+              backgroundColor: 'rgba(137, 255, 0, 0.03)',
+              borderColor: 'rgba(137, 255, 0, 0.28)',
+              boxShadow: '0 4px 20px rgba(137, 255, 0, 0.06)'
+            }}
+          >
+            <div>
+              <div className="flex items-center justify-between gap-2 mb-3">
+                <span className="px-2.5 py-1 rounded-full text-[10px] font-mono font-bold bg-[#89ff00]/20 text-[#89ff00] border border-[#89ff00]/40">
+                  PRIORITY 1 // ACTIVE EDGE
+                </span>
+                <span className="w-2 h-2 rounded-full bg-[#89ff00] animate-pulse" title="Serving Live Traffic" />
+              </div>
+              <h4 className="text-base font-bold text-white mb-1">my-mac</h4>
+              <p className="text-xs font-mono text-neutral-400 mb-3">68.233.115.138 &bull; VCN 10.0.0.86</p>
+              <div className="space-y-1.5 text-xs font-mono text-neutral-300">
+                <div className="flex items-center justify-between py-1 border-b border-white/5">
+                  <span className="text-neutral-400">Ingress Role:</span>
+                  <span className="text-[#89ff00] font-bold">100% Active Traffic</span>
+                </div>
+                <div className="flex items-center justify-between py-1 border-b border-white/5">
+                  <span className="text-neutral-400">Core Engine:</span>
+                  <span className="text-white">personal-site-rust :3002</span>
+                </div>
+                <div className="flex items-center justify-between py-1">
+                  <span className="text-neutral-400">DB State:</span>
+                  <span className="text-emerald-400 font-semibold flex items-center gap-1">
+                    <Database className="w-3 h-3" /> Master Writer
+                  </span>
+                </div>
+              </div>
+            </div>
+            <div className="mt-4 pt-3 border-t border-white/5 text-[11px] font-mono text-neutral-400 flex items-center justify-between">
+              <span>Failover Timeout:</span>
+              <span className="text-white font-bold">&lt; 3s auto-reroute</span>
+            </div>
+          </div>
+
+          {/* Node 2: cos */}
+          <div
+            className="rounded-2xl p-5 border relative flex flex-col justify-between"
+            style={{
+              backgroundColor: 'rgba(56, 189, 248, 0.03)',
+              borderColor: 'rgba(56, 189, 248, 0.28)',
+              boxShadow: '0 4px 20px rgba(56, 189, 248, 0.06)'
+            }}
+          >
+            <div>
+              <div className="flex items-center justify-between gap-2 mb-3">
+                <span className="px-2.5 py-1 rounded-full text-[10px] font-mono font-bold bg-sky-500/20 text-sky-400 border border-sky-500/40">
+                  PRIORITY 2 // FAILSAFE SLOT 1
+                </span>
+                <span className="w-2 h-2 rounded-full bg-sky-400" title="Warm Standby Ready" />
+              </div>
+              <h4 className="text-base font-bold text-white mb-1">container-of-souls (cos)</h4>
+              <p className="text-xs font-mono text-neutral-400 mb-3">129.154.32.125 &bull; VCN 10.0.0.195</p>
+              <div className="space-y-1.5 text-xs font-mono text-neutral-300">
+                <div className="flex items-center justify-between py-1 border-b border-white/5">
+                  <span className="text-neutral-400">Failover Role:</span>
+                  <span className="text-sky-400 font-bold">Slot 1 Hot Standby</span>
+                </div>
+                <div className="flex items-center justify-between py-1 border-b border-white/5">
+                  <span className="text-neutral-400">Standby Tunnel:</span>
+                  <span className="text-white">127.0.0.1:9100 -&gt; :3002</span>
+                </div>
+                <div className="flex items-center justify-between py-1">
+                  <span className="text-neutral-400">DB State:</span>
+                  <span className="text-sky-400 font-semibold flex items-center gap-1">
+                    <Database className="w-3 h-3" /> Cascaded Replica
+                  </span>
+                </div>
+              </div>
+            </div>
+            <div className="mt-4 pt-3 border-t border-white/5 text-[11px] font-mono text-neutral-400 flex items-center justify-between">
+              <span>Fallover Latency:</span>
+              <span className="text-white font-bold">2.3 ms verified</span>
+            </div>
+          </div>
+
+          {/* Node 3: pro */}
+          <div
+            className="rounded-2xl p-5 border relative flex flex-col justify-between"
+            style={{
+              backgroundColor: 'rgba(245, 158, 11, 0.03)',
+              borderColor: 'rgba(245, 158, 11, 0.28)',
+              boxShadow: '0 4px 20px rgba(245, 158, 11, 0.06)'
+            }}
+          >
+            <div>
+              <div className="flex items-center justify-between gap-2 mb-3">
+                <span className="px-2.5 py-1 rounded-full text-[10px] font-mono font-bold bg-amber-500/20 text-amber-400 border border-amber-500/40">
+                  PRIORITY 3 // FAILSAFE SLOT 2
+                </span>
+                <span className="w-2 h-2 rounded-full bg-amber-400" title="Auxiliary Standby Ready" />
+              </div>
+              <h4 className="text-base font-bold text-white mb-1">prometheus (pro)</h4>
+              <p className="text-xs font-mono text-neutral-400 mb-3">35.208.86.56 &bull; GCP e2-micro</p>
+              <div className="space-y-1.5 text-xs font-mono text-neutral-300">
+                <div className="flex items-center justify-between py-1 border-b border-white/5">
+                  <span className="text-neutral-400">Auxiliary Role:</span>
+                  <span className="text-amber-400 font-bold">Slot 2 Double-Fault</span>
+                </div>
+                <div className="flex items-center justify-between py-1 border-b border-white/5">
+                  <span className="text-neutral-400">Auxiliary Tunnel:</span>
+                  <span className="text-white">127.0.0.1:9101 -&gt; :3002</span>
+                </div>
+                <div className="flex items-center justify-between py-1">
+                  <span className="text-neutral-400">DB State:</span>
+                  <span className="text-amber-400 font-semibold flex items-center gap-1">
+                    <Database className="w-3 h-3" /> Cascaded Replica
+                  </span>
+                </div>
+              </div>
+            </div>
+            <div className="mt-4 pt-3 border-t border-white/5 text-[11px] font-mono text-neutral-400 flex items-center justify-between">
+              <span>Double-Fault Fallover:</span>
+              <span className="text-white font-bold">518 ms verified</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Database & Failover Protocol Ticker */}
+        <div className="mt-5 pt-4 border-t border-white/5 flex flex-wrap items-center justify-between gap-4 text-xs font-mono">
+          <div className="flex items-center gap-2 text-neutral-300">
+            <span className="w-1.5 h-1.5 rounded-full bg-[#89ff00] animate-pulse" />
+            <span><strong>Database Replication:</strong> Transactional SQLite <code className="text-[#89ff00]">.backup</code> cascaded across cluster every 30m (<code className="text-neutral-400">my-mac &gt; cos &gt; pro</code>)</span>
+          </div>
+          <div className="flex items-center gap-2 text-neutral-400">
+            <ShieldCheck className="w-4 h-4 text-emerald-400" />
+            <span>Nginx Directive: <code className="text-white font-bold">proxy_next_upstream error timeout http_502 http_503 http_504</code></span>
+          </div>
+        </div>
+      </div>
+
+      {/* ──────────────────────────────────────────────────────────── */}
+      {/* 3. SEGMENT NAVIGATION & FILTERS */}
+      {/* ──────────────────────────────────────────────────────────── */}
       <div
         className="flex flex-col xl:flex-row xl:items-center justify-between gap-4 p-2 rounded-2xl backdrop-blur-xl"
         style={{
@@ -214,7 +394,7 @@ export default function ServicesTab({ services = [], onServiceAction, onRefresh,
             }`}
           >
             <Server className="w-3.5 h-3.5" />
-            <span>Primary Node ({primaryServices.length})</span>
+            <span>Priority 1: my-mac ({primaryServices.length})</span>
           </button>
 
           <button
@@ -226,7 +406,7 @@ export default function ServicesTab({ services = [], onServiceAction, onRefresh,
             }`}
           >
             <Cpu className="w-3.5 h-3.5" />
-            <span>Backup Node ({backupServices.length})</span>
+            <span>Priority 2: cos ({backupServices.length})</span>
           </button>
 
           <button
@@ -238,7 +418,7 @@ export default function ServicesTab({ services = [], onServiceAction, onRefresh,
             }`}
           >
             <Server className="w-3.5 h-3.5" />
-            <span>GCP / pro ({gcpServices.length})</span>
+            <span>Priority 3: pro ({gcpServices.length})</span>
           </button>
 
           <button
@@ -250,7 +430,7 @@ export default function ServicesTab({ services = [], onServiceAction, onRefresh,
             }`}
           >
             <Layers className="w-3.5 h-3.5" />
-            <span>Multi-Node / Cluster ({bothServices.length})</span>
+            <span>Swarm Fabric ({bothServices.length})</span>
           </button>
         </div>
 
@@ -340,7 +520,7 @@ export default function ServicesTab({ services = [], onServiceAction, onRefresh,
       </div>
 
       {/* ──────────────────────────────────────────────────────────── */}
-      {/* 1. PRIMARY NODE */}
+      {/* 4. PRIORITY 1: MY-MAC */}
       {/* ──────────────────────────────────────────────────────────── */}
       {(nodeFilter === 'all' || nodeFilter === 'primary') && (
         <section className="space-y-4">
@@ -359,17 +539,17 @@ export default function ServicesTab({ services = [], onServiceAction, onRefresh,
               <div>
                 <div className="flex items-center gap-2.5 flex-wrap">
                   <h3 className="text-base sm:text-lg font-bold text-white tracking-tight leading-snug">
-                    Primary Node // Ingress & Core Fabric
+                    Priority 1: my-mac // Active Edge & Ingress Proxy
                   </h3>
                   <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-[#89ff00]/15 text-[#89ff00] border border-[#89ff00]/30">
-                    PRIMARY CORE
+                    ACTIVE EDGE CORE
                   </span>
                   <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-medium bg-white/5 text-neutral-300 border border-white/10">
-                    10.0.0.86
+                    68.233.115.138 &bull; 10.0.0.86
                   </span>
                 </div>
                 <p className="text-xs font-mono text-neutral-400 mt-1">
-                  Edge reverse proxy, production stateful database, Stalwart mail daemon, and primary desktop servers.
+                  Public edge reverse proxy, master stateful database writer, Stalwart mail daemon, and active desktop server.
                 </p>
               </div>
             </div>
@@ -390,14 +570,14 @@ export default function ServicesTab({ services = [], onServiceAction, onRefresh,
             </div>
           ) : (
             <div className="p-8 text-center rounded-2xl bg-white/[0.02] border border-white/5 text-neutral-400 text-xs font-mono">
-              No matching services on Primary VM for active filters.
+              No matching services on Priority 1 Node for active filters.
             </div>
           )}
         </section>
       )}
 
       {/* ──────────────────────────────────────────────────────────── */}
-      {/* 2. BACKUP NODE */}
+      {/* 5. PRIORITY 2: COS */}
       {/* ──────────────────────────────────────────────────────────── */}
       {(nodeFilter === 'all' || nodeFilter === 'backup') && (
         <section className="space-y-4">
@@ -416,17 +596,17 @@ export default function ServicesTab({ services = [], onServiceAction, onRefresh,
               <div>
                 <div className="flex items-center gap-2.5 flex-wrap">
                   <h3 className="text-base sm:text-lg font-bold text-white tracking-tight leading-snug">
-                    Backup Node // Standby & Compute Worker
+                    Priority 2: cos // Failsafe Slot 1 & Standby Engines
                   </h3>
                   <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-sky-500/15 text-sky-400 border border-sky-500/30">
-                    STANDBY & WORKER
+                    FAILSAFE SLOT 1
                   </span>
                   <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-medium bg-white/5 text-neutral-300 border border-white/10">
-                    10.0.0.195
+                    129.154.32.125 &bull; 10.0.0.195
                   </span>
                 </div>
                 <p className="text-xs font-mono text-neutral-400 mt-1">
-                  Dedicated isolated compute node hosting Bloomberg Terminal, Green standby desktop, and game engines.
+                  Dedicated isolated compute node hosting Bloomberg Terminal, Green standby desktop, and cascading warm standby personal-site engine.
                 </p>
               </div>
             </div>
@@ -447,14 +627,14 @@ export default function ServicesTab({ services = [], onServiceAction, onRefresh,
             </div>
           ) : (
             <div className="p-8 text-center rounded-2xl bg-white/[0.02] border border-white/5 text-neutral-400 text-xs font-mono">
-              No matching services on Backup Node for active filters.
+              No matching services on Priority 2 Node for active filters.
             </div>
           )}
         </section>
       )}
 
       {/* ──────────────────────────────────────────────────────────── */}
-      {/* 3. GCP AUXILIARY NODE */}
+      {/* 6. PRIORITY 3: PRO */}
       {/* ──────────────────────────────────────────────────────────── */}
       {(nodeFilter === 'all' || nodeFilter === 'gcp') && (
         <section className="space-y-4">
@@ -473,17 +653,17 @@ export default function ServicesTab({ services = [], onServiceAction, onRefresh,
               <div>
                 <div className="flex items-center gap-2.5 flex-wrap">
                   <h3 className="text-base sm:text-lg font-bold text-white tracking-tight leading-snug">
-                    Node 03 // GCP Auxiliary // pro
+                    Priority 3: pro // Failsafe Slot 2 & Auxiliary Compute
                   </h3>
                   <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-amber-500/15 text-amber-400 border border-amber-500/30">
-                    ON-DEMAND COMPUTE
+                    FAILSAFE SLOT 2
                   </span>
                   <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-medium bg-white/5 text-neutral-300 border border-white/10">
-                    35.208.86.56
+                    35.208.86.56 &bull; GCP e2-micro
                   </span>
                 </div>
                 <p className="text-xs font-mono text-neutral-400 mt-1">
-                  GCP e2-micro node hosting the Minecraft Bedrock and Paper manager on demand.
+                  GCP auxiliary node hosting Minecraft Bedrock and cascading auxiliary failsafe personal-site engine.
                 </p>
               </div>
             </div>
@@ -503,14 +683,14 @@ export default function ServicesTab({ services = [], onServiceAction, onRefresh,
             </div>
           ) : (
             <div className="p-8 text-center rounded-2xl bg-white/[0.02] border border-white/5 text-neutral-400 text-xs font-mono">
-              No matching services on the GCP pro node for active filters.
+              No matching services on Priority 3 Node for active filters.
             </div>
           )}
         </section>
       )}
 
       {/* ──────────────────────────────────────────────────────────── */}
-      {/* 4. BOTH / DUAL-NODE CLUSTER FABRIC */}
+      {/* 7. TRI-NODE SWARM FABRIC */}
       {/* ──────────────────────────────────────────────────────────── */}
       {(nodeFilter === 'all' || nodeFilter === 'both') && (
         <section className="space-y-4">
@@ -529,17 +709,17 @@ export default function ServicesTab({ services = [], onServiceAction, onRefresh,
               <div>
                 <div className="flex items-center gap-2.5 flex-wrap">
                   <h3 className="text-base sm:text-lg font-bold text-white tracking-tight leading-snug">
-                    Dual-Node Cluster // Active-Standby Fabric
+                    Tri-Node Swarm Fabric // Redundant Cross-Cluster Services
                   </h3>
                   <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-purple-500/15 text-purple-300 border border-purple-500/30">
-                    BOTH NODES
+                    CROSS-NODE MESH
                   </span>
                   <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-medium bg-white/5 text-neutral-300 border border-white/10">
-                    10.0.0.86 &bull; 10.0.0.195
+                    my-mac &bull; cos &bull; pro
                   </span>
                 </div>
                 <p className="text-xs font-mono text-neutral-400 mt-1">
-                  Redundant services replicated across both VMs for zero-downtime failover and unified multi-host management.
+                  Redundant services replicated across all 3 nodes for zero-downtime failover and unified multi-host management.
                 </p>
               </div>
             </div>

@@ -185,8 +185,8 @@ pub async fn list_services(State(_state): State<SharedState>) -> impl IntoRespon
         // ── Core ─────────────────────────────────────────────────────────────
         ServiceInfo {
             id: "nginx".into(),
-            name: "Nginx Reverse Proxy".into(),
-            description: "Public-facing HTTP(S) gateway — routes all traffic to backend services".into(),
+            name: "Nginx Reverse Proxy & Load Balancer".into(),
+            description: "Public edge ingress gateway with automated failover upstream pool (my-mac > cos > pro)".into(),
             category: "core".into(),
             group: "Core Infrastructure".into(),
             status: "running".into(), // always on, no probe needed
@@ -200,12 +200,12 @@ pub async fn list_services(State(_state): State<SharedState>) -> impl IntoRespon
             ram_usage: "18 MB".into(),
             storage_usage: "45 MB".into(),
             serving_state: "active".into(),
-            traffic_route: "Public Edge Ingress (Ports 80 & 443 SSL) on my-mac".into(),
+            traffic_route: "Active Edge Proxy & Upstream Failover: my-mac (:80/:443) -> Upstream Cluster".into(),
         },
         ServiceInfo {
             id: "personal-site-rust".into(),
-            name: "Personal Site (Rust Engine)".into(),
-            description: "Main Axum backend — API, portfolio, health engine, active-standby redundant across nodes".into(),
+            name: "Personal Site Swarm Core (Rust)".into(),
+            description: "Unified Axum engine running in identical Docker containers across all 3 nodes with cascading SQLite sync".into(),
             category: "core".into(),
             group: "Cluster Fabric".into(),
             status: "running".into(),
@@ -219,12 +219,12 @@ pub async fn list_services(State(_state): State<SharedState>) -> impl IntoRespon
             ram_usage: "24 MB".into(),
             storage_usage: "62 MB".into(),
             serving_state: "both".into(),
-            traffic_route: "Actively Serving: my-mac (:3002) • Standby Replica: container-of-souls (:3002)".into(),
+            traffic_route: "Priority 1 (Active): my-mac (:3002) ➔ Failsafe 1: cos (:3002) ➔ Failsafe 2: pro (:3002)".into(),
         },
         ServiceInfo {
             id: "cockpit".into(),
             name: "Cockpit Multi-Host Bridge".into(),
-            description: "Unified web console spanning my-mac and container-of-souls (port 9090)".into(),
+            description: "Unified multi-host console spanning my-mac, container-of-souls, and prometheus (port 9090)".into(),
             category: "core".into(),
             group: "Cluster Fabric".into(),
             status: "running".into(),
@@ -238,7 +238,7 @@ pub async fn list_services(State(_state): State<SharedState>) -> impl IntoRespon
             ram_usage: "32 MB".into(),
             storage_usage: "85 MB".into(),
             serving_state: "both".into(),
-            traffic_route: "Multi-Host Console: my-mac & container-of-souls (:9090)".into(),
+            traffic_route: "Tri-Cluster Management: my-mac, cos, and pro (:9090)".into(),
         },
         ServiceInfo {
             id: "macos-server-blue".into(),
