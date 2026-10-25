@@ -61,22 +61,20 @@ pub async fn get_node_stats() -> impl IntoResponse {
     let node_name = std::env::var("NODE_NAME").unwrap_or_else(|_| {
         if host_name.contains("container-of-souls") {
             "container-of-souls".into()
+        } else if host_name.contains("prometheus") {
+            "prometheus".into()
         } else {
             "my-mac".into()
         }
     });
 
-    let is_standby = node_name == "container-of-souls"
-        || std::env::var("NODE_ROLE").unwrap_or_default() == "standby"
-        || host_name.contains("container-of-souls");
-
-    let node_role = if is_standby {
-        "Standby & On-Demand Services"
+    let (node_role, node_ip, cloud_label) = if node_name == "prometheus" || host_name.contains("prometheus") {
+        ("Auxiliary Engine & Game Host", "35.208.86.56", "Google Cloud Platform")
+    } else if node_name == "container-of-souls" || host_name.contains("container-of-souls") || std::env::var("NODE_ROLE").unwrap_or_default() == "failsafe" || std::env::var("NODE_ROLE").unwrap_or_default() == "standby" {
+        ("High-Availability Failsafe & Compute", "10.0.0.195", "Oracle Cloud")
     } else {
-        "Primary (Stateful Core & Ingress)"
+        ("Active Ingress & Core Fabric", "10.0.0.86", "Oracle Cloud")
     };
-
-    let node_ip = if is_standby { "10.0.0.195" } else { "10.0.0.86" };
 
     let os_name = System::name().unwrap_or_else(|| "Ubuntu".into());
     let os_version = System::os_version().unwrap_or_else(|| "24.04 LTS".into());

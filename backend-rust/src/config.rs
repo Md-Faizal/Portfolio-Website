@@ -25,8 +25,12 @@ impl AppConfig {
     pub fn is_standby(&self) -> bool {
         let hostname = sysinfo::System::host_name().unwrap_or_default().to_lowercase();
         self.node_role.eq_ignore_ascii_case("standby")
+            || self.node_role.eq_ignore_ascii_case("failsafe")
             || self.node_name.to_lowercase().contains("container-of-souls")
+            || self.node_name.to_lowercase().contains("prometheus")
+            || self.node_name.to_lowercase().contains("pro")
             || hostname.contains("container-of-souls")
+            || hostname.contains("prometheus")
     }
 
     pub fn is_primary(&self) -> bool {
@@ -83,8 +87,10 @@ impl AppConfig {
         let node_name = std::env::var("NODE_NAME").unwrap_or_else(|_| {
             if host_name.contains("container-of-souls") {
                 "container-of-souls".into()
+            } else if host_name.contains("prometheus") {
+                "prometheus".into()
             } else {
-                "macos".into()
+                "my-mac".into()
             }
         });
 

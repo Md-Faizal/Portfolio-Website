@@ -310,6 +310,26 @@ jobs:
           else
             echo "⚠️ Standby key /home/ubuntu/.ssh/cockpit-container-of-souls not found; skipping standby sync."
           fi
+
+          # Propagate to Auxiliary Node (pro @ 35.208.86.56 via prometheus SSH host)
+          echo "🛰️ Propagating release to Auxiliary Node (pro @ 35.208.86.56)..."
+          if ssh prometheus "echo PING" >/dev/null 2>&1; then
+            mkdir -p /home/ubuntu/stack/apps/personal-site
+            scp "$TARGET_DIR/personal-site-rust" prometheus:/home/ubuntu/stack/apps/personal-site/personal-site-rust.tmp
+            ssh prometheus bash -s << 'PRO_DEPLOY'
+            set -e
+            TARGET_DIR="/home/ubuntu/stack/apps/personal-site"
+            mkdir -p "$TARGET_DIR"
+            mv -f "$TARGET_DIR/personal-site-rust.tmp" "$TARGET_DIR/personal-site-rust"
+            chmod +x "$TARGET_DIR/personal-site-rust"
+            sudo systemctl restart gcp-agent.service 2>/dev/null || true
+            sleep 2
+            curl -sS http://127.0.0.1:9100/stats >/dev/null 2>&1 || true
+            echo "✅ Auxiliary personal-site-rust agent on pro is healthy and responsive!"
+PRO_DEPLOY
+          else
+            echo "⚠️ SSH host prometheus not reachable from primary; skipping pro sync."
+          fi
           REMOTESCRIPT
 
       - name: "✅ Smoke Test — faizal.uk"
