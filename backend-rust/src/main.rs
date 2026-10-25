@@ -61,6 +61,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/system-stats", get(routes::health_api::get_system_stats))
         .route("/services", get(routes::services_api::list_services))
         .route("/services/:id/action", post(routes::services_api::control_service))
+        .route("/cluster/traffic", get(routes::services_api::get_cluster_traffic))
+        .route("/cluster/action", post(routes::services_api::execute_cluster_action))
         .route("/access-logs", get(routes::security::get_access_logs))
         .route("/ban-ip", post(routes::security::ban_ip))
         .route("/banned-ips", get(routes::security::get_banned_ips))
@@ -91,6 +93,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/verify-pin", post(routes::security::verify_pin))
         .route("/change-pin", post(routes::security::change_pin))
         .route("/stats", get(routes::health_api::get_node_stats))
+        .route("/cluster/traffic", get(routes::services_api::get_cluster_traffic))
         .merge(admin_routes);
 
     // Dynamic uploads directory

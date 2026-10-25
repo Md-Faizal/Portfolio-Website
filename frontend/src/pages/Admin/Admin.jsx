@@ -636,9 +636,12 @@ export default function Admin({ onExit }) {
       {activeTab === 'services' && (
         <ServicesTab
           services={services}
+          cluster={cluster}
           onServiceAction={handleServiceAction}
           onRefresh={fetchAllData}
           refreshing={refreshing}
+          fetchWithAuth={fetchWithAuth}
+          showToast={showToast}
         />
       )}
 
