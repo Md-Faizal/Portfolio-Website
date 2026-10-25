@@ -1,7 +1,18 @@
+# ─── Tri-Node Cluster Upstream: my-mac (Active) > cos (Failsafe 1) > pro (Failsafe 2) ───
+upstream personal_site_cluster {
+    server 127.0.0.1:3002 max_fails=2 fail_timeout=5s;
+    server 127.0.0.1:9100 weight=90 max_fails=2 fail_timeout=5s backup;
+    server 127.0.0.1:9101 weight=10 max_fails=2 fail_timeout=5s backup;
+}
+
 # ─── Stalwart Mail Server (Dedicated VHost) ───
 server {
     listen 80;
     listen [::]:80;
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    ssl_certificate /etc/letsencrypt/live/mail.faizal.uk/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/mail.faizal.uk/privkey.pem;
     server_name mail.faizal.uk autoconfig.faizal.uk autodiscover.faizal.uk;
     client_max_body_size 50M;
 
@@ -20,7 +31,7 @@ server {
     }
 }
 
-# ─── Personal Site & Cluster Admin Console ───
+# ????????? Personal Site & Cluster Admin Console ?????????
 server {
     listen 80 default_server;
     listen [::]:80 default_server;
@@ -48,30 +59,42 @@ server {
 
     # Cluster Admin Console (SPA route)
     location = /admin {
-        try_files /index.html =404;
+        try_files /admin.html =404;
     }
 
     location = /admin.html {
-        try_files /index.html =404;
+        try_files /admin.html =404;
     }
 
-    # Personal Site Backend API
+    # Personal Site Backend API with Tri-Node Failsafe Fallover
     location /save-message {
-        proxy_pass http://127.0.0.1:3002/save-message;
+        proxy_pass http://personal_site_cluster/save-message;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto https;
+        proxy_connect_timeout 2s;
+        proxy_send_timeout 5s;
+        proxy_read_timeout 10s;
+        proxy_next_upstream error timeout invalid_header http_502 http_503 http_504;
+        proxy_next_upstream_tries 3;
+        proxy_next_upstream_timeout 5s;
     }
 
     location /api/ {
-        proxy_pass http://127.0.0.1:3002/api/;
+        proxy_pass http://personal_site_cluster/api/;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto https;
+        proxy_connect_timeout 2s;
+        proxy_send_timeout 5s;
+        proxy_read_timeout 10s;
+        proxy_next_upstream error timeout invalid_header http_502 http_503 http_504;
+        proxy_next_upstream_tries 3;
+        proxy_next_upstream_timeout 5s;
     }
 
     # Forward webmail shortcut to mail.faizal.uk
@@ -101,3 +124,4 @@ server {
         try_files $uri $uri/ /index.html;
     }
 }
+
