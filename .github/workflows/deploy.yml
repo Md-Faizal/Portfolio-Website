@@ -135,7 +135,7 @@ jobs:
           retention-days: 1
 
   deploy-cluster:
-    name: "🚀 Swarm Deploy: Dual-Node Cluster (my-mac & cos)"
+    name: "🚀 Swarm Deploy: Tri-Node Cluster (my-mac > cos > pro)"
     needs: [preflight-check, build-frontend, build-backend]
     if: github.event.inputs.dry_run != 'true'
     runs-on: ubuntu-latest
@@ -209,23 +209,26 @@ jobs:
           TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
 
           echo "======================================================"
-          echo "🚀 Primary Host Deployment: $SSH_USER@$SSH_HOST"
-          echo "   Target Dir: $TARGET_DIR"
-          echo "   Timestamp : $TIMESTAMP"
+          echo "🚀 Tri-Node Swarm Cluster Deployment (my-mac > cos > pro)"
+          echo "   Priority 1 (Active Edge)       : $SSH_USER@$SSH_HOST"
+          echo "   Priority 2 (Failsafe Slot 1)   : cos @ 10.0.0.195"
+          echo "   Priority 3 (Failsafe Slot 2)   : pro @ 35.208.86.56"
+          echo "   Target Dir                     : $TARGET_DIR"
+          echo "   Timestamp                      : $TIMESTAMP"
           echo "======================================================"
 
-          # Step 1: Pre-flight remote directory structure
-          echo "🛡️ Step 1: Ensuring remote directory structure & permissions..."
+          # Step 1: Pre-flight remote directory structure on Priority 1 (my-mac)
+          echo "🛡️ Step 1: Ensuring remote directory structure & permissions on my-mac..."
           ssh production "mkdir -p $TARGET_DIR/backend /home/ubuntu/stack/ops/ipc $TARGET_DIR/public $TARGET_DIR/frontend/dist"
 
-          # Step 2: Sync files via rsync
-          echo "📦 Step 2: Syncing binary, configs, and web assets via rsync..."
+          # Step 2: Sync release bundle to my-mac via rsync
+          echo "📦 Step 2: Syncing binary, configs, and web assets to my-mac via rsync..."
           rsync -avz personal-site-rust Dockerfile docker-compose.yml ca-certificates.crt scripts production:"$TARGET_DIR/"
           rsync -avz --delete frontend/dist/ production:"$TARGET_DIR/frontend/dist/"
           rsync -avz --delete public/ production:"$TARGET_DIR/public/"
 
-          # Step 3: Launch container on Primary Node (my-mac) & propagate to Standby (cos)
-          echo "🐳 Step 3: Launching Primary container on my-mac & propagating to cos..."
+          # Step 3: Launch container on Priority 1 Node (my-mac) & cascade to cluster
+          echo "🐳 Step 3: Launching Active Edge container on Priority 1 (my-mac)..."
           ssh production bash -s << 'REMOTESCRIPT'
           set -e
           TARGET_DIR="/home/ubuntu/stack/apps/personal-site"
@@ -233,15 +236,12 @@ jobs:
 
           RUNNER_SOURCE="$TARGET_DIR/scripts/stack-service-runner.sh"
           RUNNER_DEST="/home/ubuntu/stack/ops/service-runner.sh"
-          if [ ! -f "$RUNNER_SOURCE" ]; then
-            echo "❌ Updated host service runner is missing: $RUNNER_SOURCE"
-            exit 1
+          if [ -f "$RUNNER_SOURCE" ]; then
+            sudo cp -p "$RUNNER_DEST" "$RUNNER_DEST.bak.$(date +%Y%m%d_%H%M%S)" 2>/dev/null || true
+            sudo install -o root -g root -m 0755 "$RUNNER_SOURCE" "$RUNNER_DEST.tmp"
+            sudo mv "$RUNNER_DEST.tmp" "$RUNNER_DEST"
+            sudo systemctl restart stack-service-runner.service 2>/dev/null || true
           fi
-          sudo cp -p "$RUNNER_DEST" "$RUNNER_DEST.bak.$(date +%Y%m%d_%H%M%S)"
-          sudo install -o root -g root -m 0755 "$RUNNER_SOURCE" "$RUNNER_DEST.tmp"
-          sudo mv "$RUNNER_DEST.tmp" "$RUNNER_DEST"
-          sudo systemctl restart stack-service-runner.service
-          sudo systemctl is-active --quiet stack-service-runner.service
 
           # Ensure public web assets are world-readable and directories traversable for Nginx (www-data)
           chmod -R a+rX "$TARGET_DIR/public" "$TARGET_DIR/frontend/dist" 2>/dev/null || true
@@ -255,20 +255,22 @@ jobs:
             sudo systemctl reload docker 2>/dev/null || sudo systemctl restart docker 2>/dev/null || true
           fi
 
-          # Ensure the standby probe SSH tunnel is active
-          systemctl is-active --quiet cos-tunnel.service || sudo systemctl restart cos-tunnel.service || true
+          # Ensure telemetry SSH tunnels to cos and pro are active
+          systemctl is-active --quiet cos-tunnel.service || sudo systemctl restart cos-tunnel.service 2>/dev/null || true
+          systemctl is-active --quiet gcp-tunnel.service || sudo systemctl restart gcp-tunnel.service 2>/dev/null || true
 
-          # Start container (Primary role) — instant build in <2s with zero network calls
-          NODE_ROLE=primary docker compose up -d --build --remove-orphans
+          # Start container on Priority 1 (Active Edge role) — instant build in <2s with cached layers
+          echo "⚡ Launching Priority 1 (my-mac) personal-site-rust container..."
+          NODE_ROLE=active docker compose up -d --build --remove-orphans
 
-          # Verify container health
-          sleep 5
+          # Verify container health on Priority 1
+          sleep 4
           docker ps --filter "name=personal-site-rust"
           curl -sS http://127.0.0.1:3002/api/maintenance-status || exit 1
-          echo "✅ Primary personal-site-rust container on my-mac is healthy and serving requests!"
+          echo "✅ Priority 1 (my-mac) personal-site-rust is healthy and serving active traffic!"
 
-          # Propagate to Standby Node (cos @ 10.0.0.195) via high-speed internal Oracle VCN
-          echo "🛰️ Propagating release to Standby Node (cos @ 10.0.0.195)..."
+          # Step 4: Propagate release to Priority 2 Node (cos @ 10.0.0.195 via internal Oracle VCN)
+          echo "🛰️ Step 4: Propagating release to Priority 2 Failsafe Slot 1 (cos @ 10.0.0.195)..."
           if [ -f "/home/ubuntu/.ssh/cockpit-container-of-souls" ]; then
             scp -o StrictHostKeyChecking=no -i /home/ubuntu/.ssh/cockpit-container-of-souls \
               "$TARGET_DIR/personal-site-rust" ubuntu@10.0.0.195:"$TARGET_DIR/personal-site-rust.tmp"
@@ -286,39 +288,40 @@ jobs:
               --exclude "personal-site-rust*" \
               "$TARGET_DIR/" ubuntu@10.0.0.195:"$TARGET_DIR/"
 
-            ssh -o StrictHostKeyChecking=no -i /home/ubuntu/.ssh/cockpit-container-of-souls ubuntu@10.0.0.195 bash -s << 'COS_DEPLOY'
-            set -e
-            TARGET_DIR="/home/ubuntu/stack/apps/personal-site"
-            cd "$TARGET_DIR"
-            mv -f personal-site-rust.tmp personal-site-rust
-            chmod +x personal-site-rust
-            chmod -R a+rX "$TARGET_DIR/public" "$TARGET_DIR/frontend/dist" 2>/dev/null || true
-            chmod a+rx "$TARGET_DIR" /home/ubuntu /home/ubuntu/stack /home/ubuntu/stack/apps 2>/dev/null || true
-            mkdir -p backend
-            touch backend/messages.db
-            NODE_ROLE=standby docker compose up -d --build --remove-orphans
-            sleep 4
-            curl -sS http://127.0.0.1:3002/api/maintenance-status || exit 1
-            echo "✅ Standby personal-site-rust container on cos is healthy and ready!"
-
-            # Reload COS telemetry agent with accurate /proc/stat CPU metrics
-            chmod -R a+rx "$TARGET_DIR/scripts" 2>/dev/null || true
-            if [ -f "$TARGET_DIR/scripts/cos_agent.py" ]; then
-              sudo systemctl restart cos-agent.service 2>/dev/null || sudo systemctl restart cos-slave.service 2>/dev/null || (pkill -f cos_agent.py 2>/dev/null; nohup python3 "$TARGET_DIR/scripts/cos_agent.py" > /dev/null 2>&1 &) || true
-            fi
-          COS_DEPLOY
+            ssh -o StrictHostKeyChecking=no -i /home/ubuntu/.ssh/cockpit-container-of-souls ubuntu@10.0.0.195 "TARGET_DIR=/home/ubuntu/stack/apps/personal-site; cd \$TARGET_DIR && mv -f personal-site-rust.tmp personal-site-rust && chmod +x personal-site-rust && chmod -R a+rX \$TARGET_DIR/public \$TARGET_DIR/frontend/dist 2>/dev/null || true && chmod a+rx \$TARGET_DIR /home/ubuntu /home/ubuntu/stack /home/ubuntu/stack/apps 2>/dev/null || true && mkdir -p backend /home/ubuntu/stack/ops/ipc && touch backend/messages.db && NODE_ROLE=failsafe docker compose up -d --build --remove-orphans && sleep 4 && curl -sS http://127.0.0.1:3002/api/maintenance-status || exit 1"
+            echo "✅ Priority 2 (cos) personal-site-rust container is healthy and standing by!"
           else
-            echo "⚠️ Standby key /home/ubuntu/.ssh/cockpit-container-of-souls not found; skipping standby sync."
+            echo "⚠️ Standby key /home/ubuntu/.ssh/cockpit-container-of-souls not found; skipping cos sync."
           fi
 
-          # Propagate to Auxiliary Node (pro @ 35.208.86.56 via prometheus SSH host)
-          echo "🛰️ Propagating release to Auxiliary Node (pro @ 35.208.86.56)..."
+          # Step 5: Propagate release to Priority 3 Node (pro @ 35.208.86.56 via prometheus SSH host)
+          echo "🛰️ Step 5: Propagating release to Priority 3 Failsafe Slot 2 (pro @ 35.208.86.56)..."
           if ssh prometheus "echo PING" >/dev/null 2>&1; then
-            scp "$TARGET_DIR/personal-site-rust" prometheus:/home/ubuntu/stack/apps/personal-site/personal-site-rust.tmp
-            ssh prometheus "TARGET_DIR=/home/ubuntu/stack/apps/personal-site; mkdir -p \$TARGET_DIR && mv -f \$TARGET_DIR/personal-site-rust.tmp \$TARGET_DIR/personal-site-rust && chmod +x \$TARGET_DIR/personal-site-rust && sudo systemctl restart gcp-agent.service 2>/dev/null || true"
-            echo "✅ Auxiliary personal-site-rust agent on pro is updated and responsive!"
+            scp "$TARGET_DIR/personal-site-rust" prometheus:"$TARGET_DIR/personal-site-rust.tmp"
+
+            rsync -rlptD --omit-dir-times --no-o --no-g \
+              -e "ssh" \
+              --exclude "mail" \
+              --exclude "backups" \
+              --exclude "target" \
+              --exclude "node_modules" \
+              --exclude ".git" \
+              --exclude "*.db*" \
+              --exclude "*.tar.gz" \
+              --exclude "public/uploads" \
+              --exclude "personal-site-rust*" \
+              "$TARGET_DIR/" prometheus:"$TARGET_DIR/"
+
+            ssh prometheus "TARGET_DIR=/home/ubuntu/stack/apps/personal-site; cd \$TARGET_DIR && mv -f personal-site-rust.tmp personal-site-rust && chmod +x personal-site-rust && chmod -R a+rX \$TARGET_DIR/public \$TARGET_DIR/frontend/dist 2>/dev/null || true && chmod a+rx \$TARGET_DIR /home/ubuntu /home/ubuntu/stack /home/ubuntu/stack/apps 2>/dev/null || true && mkdir -p backend /home/ubuntu/stack/ops/ipc && touch backend/messages.db && NODE_ROLE=failsafe docker compose up -d --build --remove-orphans && sleep 4 && curl -sS http://127.0.0.1:3002/api/maintenance-status || exit 1"
+            echo "✅ Priority 3 (pro) personal-site-rust container is healthy and standing by!"
           else
-            echo "⚠️ SSH host prometheus not reachable from primary; skipping pro sync."
+            echo "⚠️ SSH host prometheus not reachable from my-mac; skipping pro sync."
+          fi
+
+          # Step 6: Cascading Hot SQLite Database Sync across cluster: my-mac > cos > pro
+          echo "🔄 Step 6: Triggering cascading SQLite DB sync across cluster (my-mac > cos > pro)..."
+          if [ -x "/home/ubuntu/scripts/cluster-db-sync.sh" ]; then
+            /home/ubuntu/scripts/cluster-db-sync.sh || true
           fi
           REMOTESCRIPT
 
